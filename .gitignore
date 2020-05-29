@@ -1,0 +1,9 @@
+.project
+.pydevproject
+gmail-credentials.json
+google-api-credentials.json
+google-sheet-ids.json
+googletoken.pickle
+kobo-credentials.json
+kobo.db
+test/

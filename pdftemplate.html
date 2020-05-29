@@ -1,0 +1,51 @@
+<html>
+<head>
+    <meta http-equiv="content-type" content="text-html; charset=utf-8">
+</head>
+<body style='{{ styles.body }}'>
+<h1 style='{{ styles.h1 }}'>Survey on COVID-19 behaviours in Singapore</h1>
+<p style='{{ styles.p }}'>Thank you for participating in our survey. {% if labeled_result.questions.S70.questions.again.answer_code != '00' %}You offered to take the survey again in {{ labeled_result.questions.S70.questions.again.answer_code | int}} {% if labeled_result.questions.S70.questions.again.answer_code == '01' %}week's{% else %}weeks'{% endif %} time. On <span style='{{ styles.remind_date }}'>{{ next_date }}</span>, please go to <a href='https://rebrand.ly/covidsgsurvey-enSR' style='{{ styles.a }}'>rebrand.ly/covidsgsurvey-enSR</a> and participate again.{% endif %}</p>
+<p style='{{ styles.p }}'>As requested, here's a copy of your responses:</p>
+
+{%- set ns = namespace(current_group = '') -%}
+{%- for question in sorted_questions -%}
+    {%- if question['group_code'] != 'S00' and question['group_code'] in labeled_result['questions'] -%}
+        {%- if question['group_code'] != ns.current_group -%}
+            {%- if ns.current_group != '' -%}
+    </tbody>
+</table>
+<br />
+            {%- endif -%}
+            {%- set ns.current_group = question['group_code'] %}
+<table style='{{ styles.table }}'>
+    <caption style='{{ styles.table_caption }}'>{{ questions[ns.current_group].label }}</caption>
+    <thead>
+        <tr style='{{ styles.tr }}'>
+            <th scope="col" style='{{ styles.th }}'>Question</th>
+            <th scope="col" style='{{ styles.th }}'>Your answer</th>
+        </tr>
+    </thead>
+    <tbody>
+        {%- endif -%}
+        {%- if question.question_code in labeled_result['questions'][ns.current_group]['questions'] -%}
+            {%- if questions[ns.current_group]['questions'][question.question_code]['type'] == 'select_multiple' %}
+        <tr class='qheader' style='{{ styles.tr_qheader}}'>
+            <td colspan='2' style='{{ styles.td }}'>{{ question.question_label }}</td>
+        </tr>
+            {%- else %}
+        <tr {% if questions[ns.current_group]['questions'][question.question_code]['type'] == 'select_multiple_option' %}class='level-2'{% endif %} style='{{ styles.tr }}'>
+            <td class='question' style='{% if questions[ns.current_group]['questions'][question.question_code]['type'] == 'select_multiple_option' %}{{ styles.td_question_level2 }}{% else %}{{ styles.td_question }}{% endif %}'>{{ question.question_label }}</td>
+            <td class='answer' style='{{ styles.td }}'>{{ labeled_result['questions'][ns.current_group]['questions'][question.question_code]['answer_label'] }}</td>
+        </tr>
+            {%- endif -%}
+        {%- endif -%}
+    {%- endif -%}
+{%- endfor -%}
+    </tbody>
+</table>
+
+<h2 style='{{ styles.h2 }}'>Contact us</h2>
+<p>Email: <a href='mailto:covidsgsurvey@washinseasia.org' style='{{ styles.a }}'>covidsgsurvey@washinseasia.org</a></p>
+<p>Telegram: <a href='https://t.me/washinseasia' style='{{ styles.a }}'>t.me/washinseasia</a></p>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "body": "margin: 0 auto; font-family: \"Nunito Light\",\"Open Sans\", sans-serif; line-height: 1.25; color: rgb(60,72,88); max-width: 900px; text-align: center;",
+  "a": "color: rgb(255,192,19);",
+  "h1": "text-align: center; font-family: \"Arvo\",\"serif\"; font-size: 2em;",
+  "h2": "text-align: center; font-family: \"Arvo\",\"serif\"; font-size: 1.5em;",
+  "p": "text-align: center",
+  "remind_date": "font-weight: bold;",
+  "table": "border: 1px solid #ccc; border-collapse: collapse; margin: 0; padding: 0; width: 100%; table-layout: fixed;",
+  "table_caption": "font-family: \"Arvo\",\"serif\"; font-size: 1.5em; margin: .5em 0 .75em;",
+  "tr": "background-color: #f8f8f8; border: 1px solid #ddd; padding: .35em;",
+  "tr_qheader": "background-color: #f8f8f8; border: 1px solid #ddd; padding: .35em; font-weight: bold;",
+  "th": "padding: .625em; text-align: left; font-size: .85em; letter-spacing: .1em; text-transform: uppercase; text-align: center;",
+  "td": "padding: .625em; text-align: left;",
+  "td_question": "padding: .625em; text-align: left; font-weight: bold;",
+  "td_question_level2": "padding: .625em; text-align: left; font-weight: bold; padding-left: 2em"
+}
