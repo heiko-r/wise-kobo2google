@@ -217,6 +217,8 @@ if new_data_online['count'] > 0 or new_data_interview['count'] > 0 or add_header
     GOOGLE_UNIQUEID_AFTER_QUESTION = 'ID5'
     GOOGLE_LATEST_RESPONSE_FORMULA = '=if(INDIRECT(KL$1&ROW())="","",max(arrayformula(if(KK:KK=INDIRECT(KL$1&ROW()),row(KK:KK)))))'
     
+    GOOGLE_COLUMN_UNIQUEID = 'KK'
+    
     GC_CONTACT = 'S70'
     QC_VOLUNTEER = 'volunteer'
     QC_PARTNER = 'partner'
@@ -277,7 +279,7 @@ if new_data_online['count'] > 0 or new_data_interview['count'] > 0 or add_header
     #version_code = sheet.values().get(spreadsheetId=GOOGLE_SHEET_ID_CLEANEDDATA, range='D2').execute().get('values', [])
     
     # Get list of existing UniqueIDs for later
-    uidresult = sheet.values().get(spreadsheetId=GOOGLE_SHEET_IDS['CLEANEDDATA'], range='Data (labeled)!KD4:KD').execute()
+    uidresult = sheet.values().get(spreadsheetId=GOOGLE_SHEET_IDS['CLEANEDDATA'], range=f'Data (labeled)!{GOOGLE_COLUMN_UNIQUEID}4:{GOOGLE_COLUMN_UNIQUEID}').execute()
     uidlist = uidresult.get('values', [])
     #if debug:
     #    print('Found version code:')
