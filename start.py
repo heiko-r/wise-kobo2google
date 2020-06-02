@@ -212,12 +212,14 @@ if new_data_online['count'] > 0 or new_data_interview['count'] > 0 or add_header
         'vMri5MYvayCRfS6yrXGxhc': 'v22',
         'vDqpxGYyF28VCgWJRimDTW': 'v1-i',
         'vPzpWuwFFCobmzT6BxtBpi': 'v2-i',
+        'vVbU7nhpFDTRrHdTWWhSzU': 'v23',
     }
     GOOGLE_UNIQUEID_AFTER_GROUP = 'S60'
     GOOGLE_UNIQUEID_AFTER_QUESTION = 'ID5'
-    GOOGLE_LATEST_RESPONSE_FORMULA = '=if(INDIRECT(KL$1&ROW())="","",max(arrayformula(if(KK:KK=INDIRECT(KL$1&ROW()),row(KK:KK)))))'
     
-    GOOGLE_COLUMN_UNIQUEID = 'KK'
+    GOOGLE_COLUMN_UNIQUEID = 'KV'
+    GOOGLE_COLUMN_LATESTRESPONSE = 'KW'
+    GOOGLE_LATEST_RESPONSE_FORMULA = f'=if(INDIRECT({GOOGLE_COLUMN_LATESTRESPONSE}$1&ROW())="","",max(arrayformula(if({GOOGLE_COLUMN_UNIQUEID}:{GOOGLE_COLUMN_UNIQUEID}=INDIRECT({GOOGLE_COLUMN_LATESTRESPONSE}$1&ROW()),row({GOOGLE_COLUMN_UNIQUEID}:{GOOGLE_COLUMN_UNIQUEID})))))'
     
     GC_CONTACT = 'S70'
     QC_VOLUNTEER = 'volunteer'
@@ -281,9 +283,9 @@ if new_data_online['count'] > 0 or new_data_interview['count'] > 0 or add_header
     # Get list of existing UniqueIDs for later
     uidresult = sheet.values().get(spreadsheetId=GOOGLE_SHEET_IDS['CLEANEDDATA'], range=f'Data (labeled)!{GOOGLE_COLUMN_UNIQUEID}4:{GOOGLE_COLUMN_UNIQUEID}').execute()
     uidlist = uidresult.get('values', [])
-    #if debug:
-    #    print('Found version code:')
-    #    pprint.pprint(version_code)
+    if debug:
+        print("List of UIDs:")
+        pprint.pprint(uidlist)
     
     # Put all questions from all groups into one list and sort by occurrence in the survey
     all_questions = []
