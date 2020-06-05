@@ -33,7 +33,7 @@ def columnToIndex(column_string):
     return index
 
 def getUniqueId(labeled_result):
-    global GC_ID, QC_ID1, QC_ID2, QC_ID3, QC_ID4, QC_ID5, GC_AGE, QC_AGE, debug
+    global GC_ID, QC_ID1, QC_ID2, QC_ID3, QC_ID4, QC_ID5, GC_ABOUT, QC_AGE, debug
     if debug: print('Trying to extract ID')
     try:
         id1 = str(labeled_result['questions'][GC_ID]['questions'][QC_ID1]['answer_code']).upper()
@@ -43,7 +43,7 @@ def getUniqueId(labeled_result):
         if QC_ID5 in labeled_result['questions'][GC_ID]['questions']:
             id5 = str(labeled_result['questions'][GC_ID]['questions'][QC_ID5]['answer_code'])
         else:
-            id5 = str(labeled_result['questions'][GC_AGE]['questions'][QC_AGE]['answer_code'][-1])
+            id5 = str(labeled_result['questions'][GC_ABOUT]['questions'][QC_AGE]['answer_code'][-1])
         if debug: print(f'ID: { id1 + id2 + id3 + id4 + id5 }')
         uniqueId = id1 + id2 + id3 + id4 + id5
     except KeyError as err:
@@ -213,6 +213,7 @@ if new_data_online['count'] > 0 or new_data_interview['count'] > 0 or add_header
         'vDqpxGYyF28VCgWJRimDTW': 'v1-i',
         'vPzpWuwFFCobmzT6BxtBpi': 'v2-i',
         'vVbU7nhpFDTRrHdTWWhSzU': 'v23',
+        'vQBQZaxKXmjfrd6EUv2AyW': 'v24',
     }
     GOOGLE_UNIQUEID_AFTER_GROUP = 'S60'
     GOOGLE_UNIQUEID_AFTER_QUESTION = 'ID5'
@@ -241,8 +242,9 @@ if new_data_online['count'] > 0 or new_data_interview['count'] > 0 or add_header
     QC_ID3 = 'ID3'
     QC_ID4 = 'ID4'
     QC_ID5 = 'ID5'
-    GC_AGE = 'S40'
+    GC_ABOUT = 'S40'
     QC_AGE = 'age'
+    QC_NATIONALITY = 'nationality'
     GC_INTRO = 'S10'
     QC_BEFORE = 'S10Q05'
     QC_INTERVIEWER = 'interviewer'
@@ -667,7 +669,7 @@ if new_data_online['count'] > 0 or new_data_interview['count'] > 0:
             # Respondent has answered before, claims to have answered before or wants to do the survey again
             if debug: print('Found (potential) repeat respondent!')
             # Add to repeat respondent list
-            upload_row = [None] * (columnToIndex('T') + 1) # Data list for columns A to T
+            upload_row = [None] * (columnToIndex('U') + 1) # Data list for columns A to U
             
             timestring = labeled_result['meta']['_submission_time']
             timeobj = datetime.fromisoformat(timestring)
@@ -725,6 +727,11 @@ if new_data_online['count'] > 0 or new_data_interview['count'] > 0:
                 upload_row[columnToIndex('T')] = labeled_result['questions'][GC_CONTACT]['questions'][QC_CONTACT_OTHER]['answer_code']
             except KeyError as err:
                 if debug: print('KeyError in other/T', err)
+            
+            try:
+                upload_row[columnToIndex('U')] = labeled_result['questions'][GC_ABOUT]['questions'][QC_NATIONALITY]['answer_label']
+            except KeyError as err:
+                if debug: print('KeyError in nationality/U', err)
             
             request_body = {
                 "range": 'List of repeats',
