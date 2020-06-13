@@ -40,14 +40,14 @@ def getUniqueId(labeled_result):
     global GC_ID, QC_ID1, QC_ID2, QC_ID3, QC_ID4, QC_ID5, GC_ABOUT, QC_AGE, debug
     if debug: print('Trying to extract ID')
     try:
-        id1 = str(labeled_result['questions'][GC_ID]['questions'][QC_ID1]['answer_code']).upper()
-        id2 = "{0:0=2d}".format(int(labeled_result['questions'][GC_ID]['questions'][QC_ID2]['answer_code']))
-        id3 = str(labeled_result['questions'][GC_ID]['questions'][QC_ID3]['answer_code'])
-        id4 = str(labeled_result['questions'][GC_ID]['questions'][QC_ID4]['answer_code'])
-        if QC_ID5 in labeled_result['questions'][GC_ID]['questions']:
-            id5 = str(labeled_result['questions'][GC_ID]['questions'][QC_ID5]['answer_code'])
+        id1 = str(labeled_result['results']['/'.join([GC_ID, QC_ID1])]['answer_code']).upper()
+        id2 = "{0:0=2d}".format(int(labeled_result['results']['/'.join([GC_ID, QC_ID2])]['answer_code']))
+        id3 = str(labeled_result['results']['/'.join([GC_ID, QC_ID3])]['answer_code'])
+        id4 = str(labeled_result['results']['/'.join([GC_ID, QC_ID4])]['answer_code'])
+        if '/'.join([GC_ID, QC_ID5]) in labeled_result['results']:
+            id5 = str(labeled_result['results']['/'.join([GC_ID, QC_ID5])]['answer_code'])
         else:
-            id5 = str(labeled_result['questions'][GC_ABOUT]['questions'][QC_AGE]['answer_code'][-1])
+            id5 = str(labeled_result['results']['/'.join([GC_ABOUT, QC_AGE])]['answer_code'][-1])
         if debug: print(f'ID: { id1 + id2 + id3 + id4 + id5 }')
         uniqueId = id1 + id2 + id3 + id4 + id5
     except KeyError as err:
@@ -58,7 +58,164 @@ def getUniqueId(labeled_result):
 def nextDate(submission_time_iso, weeks):
     return (datetime.fromisoformat(submission_time_iso) + timedelta(days=weeks*7, hours=8)).strftime('%A, %d %B')
 
+def flattenQuestions(group_list):
+    # Put all questions and choices from all groups into one list
+    flat_questions = []
+    for group in group_list:
+        for question in group['questions']:
+            new_question = question
+            new_question['group_code'] = group['code']
+            flat_questions.append(new_question)
+            if question['choices']:
+                for choice in question['choices']:
+                    new_choice = choice
+                    new_choice['group_code'] = group['code']
+                    new_choice['question_code'] = question['code']
+                    flat_questions.append(new_choice)
+    return flat_questions
 
+def mergeQuestions(*questions_dicts):
+    # merge the questions into one.
+    # sequence numbers will be colliding, hence the dicts cannot be simply merged
+    # The first list of questions takes precedence; only additional questions from
+    # the other lists will be added
+    group_list = []
+    
+    for questions_dict in questions_dicts:
+        # put all groups in a list:
+        tmp_groups = []
+        for group_code, group_dict in questions_dict['groups'].items():
+            tmp_groups.append({
+                'code': group_code,
+                'sequence': group_dict['sequence'],
+                'label': group_dict['label'],
+                'repeat': group_dict['repeat']
+            })
+        # sort the list by sequence number:
+        sorted_groups = sorted(tmp_groups, key=lambda group: group['sequence'])
+        
+        # go through sorted groups and add new ones to group_list:
+        for new_group in sorted_groups:
+            # search group_list for a group with the same code
+            found_group = False
+            for existing_group in group_list:
+                if existing_group['code'] == new_group['code']:
+                    found_group = True
+                    break
+            if not found_group:
+                group_list.append({
+                    'code': new_group['code'],
+                    'label': new_group['label'],
+                    'repeat': new_group['repeat'],
+                    'questions': []
+                })
+        
+        # go through each group and add new questions:
+        for group in group_list:
+            if group['code'] in questions_dict['groups'] and 'questions' in questions_dict['groups'][group['code']]:
+                # put all questions in a list:
+                tmp_questions = []
+                for question_code, question_dict in questions_dict['groups'][group['code']]['questions'].items():
+                    if group['code'] == 'S80' and question_code == 'logo': continue # skip strange 'logo' note at the end
+                    tmp_question = {
+                        'code': question_code,
+                        'sequence': question_dict['sequence']
+                    }
+                    if 'label' in question_dict:
+                        tmp_question['label'] = question_dict['label']
+                    if 'type' in question_dict:
+                        tmp_question['type'] = question_dict['type']
+                    tmp_questions.append(tmp_question)
+                # sort the list by sequence number:
+                sorted_questions = sorted(tmp_questions, key=lambda question: question['sequence'])
+                
+                # go through sorted questions and add new ones to the group's list of questions:
+                for tmp_question in sorted_questions:
+                    # search existing question list for a question with the same code
+                    found_question = False
+                    for existing_question in group['questions']:
+                        if existing_question['code'] == tmp_question['code']:
+                            found_question = True
+                            break
+                    if not found_question:
+                        new_question = {
+                            'code': tmp_question['code'],
+                            'choices': []
+                        }
+                        if 'label' in tmp_question:
+                            new_question['label'] = tmp_question['label']
+                        if 'type' in tmp_question:
+                            new_question['type'] = tmp_question['type']
+                        group['questions'].append(new_question)
+        
+        # go through each question and add new choices:
+        for group in group_list:
+            if group['code'] in questions_dict['groups'] and 'questions' in questions_dict['groups'][group['code']]:
+                for question in group['questions']:
+                    if question['code'] in questions_dict['groups'][group['code']]['questions'] and 'choices' in questions_dict['groups'][group['code']]['questions'][question['code']]:
+                        # put all choices in a list:
+                        tmp_choices = []
+                        for choice_code, choice_dict in questions_dict['groups'][group['code']]['questions'][question['code']]['choices'].items():
+                            tmp_choices.append({
+                                'code': choice_code,
+                                'label': choice_dict['label'],
+                                'sequence': choice_dict['sequence']
+                            })
+                        # sort the list by sequence number:
+                        sorted_choices = sorted(tmp_choices, key=lambda choice: choice['sequence'])
+                        
+                        # go through sorted choices and add new ones to the question's list of choices:
+                        for new_choice in sorted_choices:
+                            # search existin list for a choice with the same code
+                            found_choice = False
+                            for existing_choice in question['choices']:
+                                if existing_choice['code'] == new_choice['code']:
+                                    found_choice = True
+                                    break
+                            if not found_choice:
+                                question['choices'].append({
+                                    'code': new_choice['code'],
+                                    'label': new_choice['label']
+                                })
+        # TODO: treat 'or other' somehow
+    
+    return group_list
+
+def mergeDicts(d1, d2):
+    """
+    Modifies d1 in-place to contain values from d2.  If any value
+    in d1 is a dictionary (or dict-like), *and* the corresponding
+    value in d2 is also a dictionary, then merge them in-place.
+    """
+    for k,v2 in d2.items():
+        v1 = d1.get(k) # returns None if v1 has no value for this key
+        if ( isinstance(v1, dict) and 
+             isinstance(v2, dict) ):
+            mergeDicts(v1, v2)
+        else:
+            d1[k] = v2
+
+def getLabel(merged_questions, group_code, question_code=None, choice_code=None):
+    def labelOrCode(item, code):
+        if 'label' in item:
+            return item['label']
+        else:
+            return code
+    
+    for group in merged_questions:
+        if group['code'] == group_code:
+            if not question_code:
+                return labelOrCode(group, group_code)
+            else:
+                for question in group['questions']:
+                    if question['code'] == 'question_code':
+                        if not choice_code:
+                            return labelOrCode(question, question_code)
+                        else:
+                            for choice in question['choices']:
+                                if choice['code'] == choice_code:
+                                    return labelOrCode(choice, choice_code)
+    
 try:
     conn = sqlite3.connect('kobo.db')
     db = conn.cursor()
@@ -83,12 +240,10 @@ try:
     
     kobo = KoboExtractor(KOBO_TOKEN, 'https://kf.kobotoolbox.org/api/v2', debug=debug)
     
-    #print('Kobo: Listing assets')
-    #assets = kobo.list_assets()
-    #asset_uid_online = assets['results'][0]['uid']
-    #print('UID of first asset: ' + assets['results'][0]['uid'])
-    asset_uid_online = 'argHw9ZzcAtcmEytJbWQo7'
-    asset_uid_interview = 'aAYAW5qZHEcroKwvEq8pRb'
+    asset_uids = [
+        'argHw9ZzcAtcmEytJbWQo7', # online version
+        'aAYAW5qZHEcroKwvEq8pRb', # interview version
+    ]
     
     if debug: print('Kobo: Checking for new data')
     # Get last handled submission time
@@ -101,80 +256,55 @@ try:
     if debug: print(f'Last submit time: { last_submit_time }')
     
     # Get new submissions since last handled submission time
-    new_data_online = kobo.get_data(asset_uid_online, submitted_after=last_submit_time)
-    new_data_interview = kobo.get_data(asset_uid_interview, submitted_after=last_submit_time)
+    new_data = []
+    for asset_uid in asset_uids:
+        new_data.append(kobo.get_data(asset_uid, submitted_after=last_submit_time))
+    #new_data_online = kobo.get_data(asset_uid_online, query='{"_submission_time": {"$gt": "2020-06-08T05:40:54", "$lt": "2020-06-08T06:11:09"}}')
     
-    if new_data_online['count'] > 0 or new_data_interview['count'] > 0 or add_headers:
+    new_submissions = 0
+    for new_data_results in new_data:
+        new_submissions += new_data_results['count']
+    
+    if new_submissions > 0 or add_headers:
         if debug: print('Kobo: Getting assets')
-        asset_online = kobo.get_asset(asset_uid_online)
-        asset_interview = kobo.get_asset(asset_uid_interview)
+        assets = []
+        for asset_uid in asset_uids:
+            assets.append(kobo.get_asset(asset_uid))
         
-        if debug: print('Kobo: Getting labels for questions and answers')
+        if debug: print('Kobo: Getting labels for questions, choices and answers')
+        
+        ######## CHOICES ########
         # Create dict of of choice options in the form of choice_lists[list_name][answer_code] = answer_label
-        choice_lists_online = kobo.get_choices(asset_online)
-        choice_lists_interview = kobo.get_choices(asset_interview)
-        # merge the choice lists into one, with the online version taking precedence
-        # can ignore the sequence number here, because the order within a list should be unaffected by merging
-        choice_lists = {**choice_lists_interview, **choice_lists_online}
+        # Merge the choice lists into one, with the first versions taking precedence
+        choice_lists = {}
+        for asset in reversed(assets):
+            mergeDicts(choice_lists, kobo.get_choices(asset))
         if debug:
             print('choice_lists:')
             pprint.pprint(choice_lists)
         
-        questions_online = kobo.get_questions(asset=asset_online, unpack_multiples=True)
-        questions_interview = kobo.get_questions(asset=asset_interview, unpack_multiples=True)
+        ######## QUESTIONS ########
+        questions_list = []
+        for asset in assets:
+            questions_list.append(kobo.get_questions(asset=asset, unpack_multiples=True))
+        questions = mergeQuestions(*questions_list)
         
-        # merge the questions into one.
-        # sequence numbers will be colliding, hence the two dicts cannot be simply merged
-        # questions_online takes precedence; only additional questions from questions_interview will be added
-        questions = {}
-        sequence = 0
-        for question_group, question_group_dict in questions_online.items():
-            questions[question_group] = {}
-            questions[question_group]['label'] = question_group_dict['label']
-            questions[question_group]['questions'] = {}
-        for question_group, question_group_dict in questions_interview.items():
-            if question_group not in questions:
-                questions[question_group] = {}
-                questions[question_group]['label'] = question_group_dict['label']
-                questions[question_group]['questions'] = {}
-        for question_group in questions:
-            if question_group in questions_online:
-                for question_code, question_code_dict in questions_online[question_group]['questions'].items():
-                    questions[question_group]['questions'][question_code] = {}
-                    questions[question_group]['questions'][question_code]['type'] = question_code_dict['type']
-                    questions[question_group]['questions'][question_code]['sequence'] = sequence
-                    if 'label' in question_code_dict:
-                        questions[question_group]['questions'][question_code]['label'] = question_code_dict['label']
-                    if 'list_name' in question_code_dict:
-                        questions[question_group]['questions'][question_code]['list_name'] = question_code_dict['list_name']
-                    sequence += 1
-            if question_group in questions_interview:
-                for question_code, question_code_dict in questions_interview[question_group]['questions'].items():
-                    if question_code not in questions[question_group]['questions']:
-                        questions[question_group]['questions'][question_code] = {}
-                        questions[question_group]['questions'][question_code]['type'] = question_code_dict['type']
-                        questions[question_group]['questions'][question_code]['sequence'] = sequence
-                        if 'label' in question_code_dict:
-                            questions[question_group]['questions'][question_code]['label'] = question_code_dict['label']
-                        if 'list_name' in question_code_dict:
-                            questions[question_group]['questions'][question_code]['list_name'] = question_code_dict['list_name']
-                        sequence += 1
-        
-        # Remove all questions without labels or of the following types
-        # Note: Types in use to keep 'note', 'select_one', 'select_multiple', 'integer', 'text', '_or_other'
-        delete_types = ['start', 'end', 'today', 'begin_group', 'end_group', 'calculate']
-        for question_group, question_group_dict in questions.items():
-            # The [] part is building a list of question_codes where the question type is in the above delete list
-            for question_code in [question_code for question_code, question_dict in question_group_dict['questions'].items() if question_dict['type'] in delete_types]: del questions[question_group]['questions'][question_code]
-            for question_code in [question_code for question_code, question_dict in question_group_dict['questions'].items() if 'label' not in question_dict]: del questions[question_group]['questions'][question_code]
-        # delete empty question groups
-        for question_group in [question_group for question_group, question_group_dict in questions.items() if not question_group_dict['questions']]: del questions[question_group]
+        ## Remove all questions without labels or of the following types
+        ## Note: Types in use to keep 'note', 'select_one', 'select_multiple', 'integer', 'text', '_or_other'
+        #delete_types = ['start', 'end', 'today', 'begin_group', 'end_group', 'calculate']
+        #for question_group, question_group_dict in questions.items():
+        #    # The [] part is building a list of question_codes where the question type is in the above delete list
+        #    for question_code in [question_code for question_code, question_dict in question_group_dict['questions'].items() if question_dict['type'] in delete_types]: del questions[question_group]['questions'][question_code]
+        #    for question_code in [question_code for question_code, question_dict in question_group_dict['questions'].items() if 'label' not in question_dict]: del questions[question_group]['questions'][question_code]
+        ## delete empty question groups
+        #for question_group in [question_group for question_group, question_group_dict in questions.items() if not question_group_dict['questions']]: del questions[question_group]
         if debug:
-            print('Filtered questions:')
+            print('Merged questions:')
             pprint.pprint(questions)
         
-        ###### UPLOAD TO GOOGLE
+        flat_questions = flattenQuestions(questions)
         
+        ######## INITIALISE GOOGLE ########
         if debug: print('Initialising Google Sheets API')
         # Push data to Google Sheets
         
@@ -218,16 +348,21 @@ try:
             'vMri5MYvayCRfS6yrXGxhc': 'v22',
             'vDqpxGYyF28VCgWJRimDTW': 'v1-i',
             'vPzpWuwFFCobmzT6BxtBpi': 'v2-i',
+            'vwDorFQsYqPkrPqTpPSwA7': 'v3-i',
             'vVbU7nhpFDTRrHdTWWhSzU': 'v23',
             'vQBQZaxKXmjfrd6EUv2AyW': 'v24',
             'vuwzFJtrbydb7He29syKB7': 'v25',
             'vDRjcUWz5TfrmsHVETJaxL': 'v26',
+            'vYkEdFB2Y3PRzbPGxo7GxA': 'v27',
+            'v6kNJDKrrcEaxeBC6q4yyX': 'v4-i',
+            'vAtyPtYBTyGBjgCHtU6nnK': 'v28',
+            'v6TWK7RVicgPemLR6QzdQ4': 'v5-i',
         }
         GOOGLE_UNIQUEID_AFTER_GROUP = 'S60'
         GOOGLE_UNIQUEID_AFTER_QUESTION = 'ID5'
         
-        GOOGLE_COLUMN_UNIQUEID = 'KV'
-        GOOGLE_COLUMN_LATESTRESPONSE = 'KW'
+        GOOGLE_COLUMN_UNIQUEID = 'KQ'
+        GOOGLE_COLUMN_LATESTRESPONSE = 'KR'
         GOOGLE_LATEST_RESPONSE_FORMULA = f'=if(INDIRECT({GOOGLE_COLUMN_LATESTRESPONSE}$1&ROW())="","",max(arrayformula(if({GOOGLE_COLUMN_UNIQUEID}:{GOOGLE_COLUMN_UNIQUEID}=INDIRECT({GOOGLE_COLUMN_LATESTRESPONSE}$1&ROW()),row({GOOGLE_COLUMN_UNIQUEID}:{GOOGLE_COLUMN_UNIQUEID})))))'
         
         GC_CONTACT = 'S70'
@@ -288,7 +423,6 @@ try:
         
         # Call the Sheets API
         sheet = service.spreadsheets()
-        #version_code = sheet.values().get(spreadsheetId=GOOGLE_SHEET_ID_CLEANEDDATA, range='D2').execute().get('values', [])
         
         # Get list of existing UniqueIDs for later
         uidresult = sheet.values().get(spreadsheetId=GOOGLE_SHEET_IDS['CLEANEDDATA'], range=f'Data (labeled)!{GOOGLE_COLUMN_UNIQUEID}4:{GOOGLE_COLUMN_UNIQUEID}').execute()
@@ -296,23 +430,8 @@ try:
         if debug:
             print("List of UIDs:")
             pprint.pprint(uidlist)
-        
-        # Put all questions from all groups into one list and sort by occurrence in the survey
-        all_questions = []
-        for question_group_code, question_group_dict in questions.items():
-            for question_code, question_dict in question_group_dict['questions'].items():
-                if 'label' in question_dict:
-                    label = question_dict['label']
-                else:
-                    label = question_code
-                all_questions.append({
-                    'group_code': question_group_code,
-                    'question_code': question_code,
-                    'question_label': label,
-                    'sequence': question_dict['sequence']
-                })
-        sorted_questions = sorted(all_questions, key = lambda question: question['sequence'])
-        
+    
+    
     if add_headers:
         # Sheet is still empty -> fill the header rows first
         # Insert two new rows on top to preserve whatever may be in the sheet already
@@ -322,15 +441,25 @@ try:
         sorted_labels = ['_submission_time', 'Submission date and time (computed)', 'Date (computed)', '_version_', 'Version (computed)', '_id']
         contact_codes = [None, None, None, None, None]
         contact_labels = ['_submission_time', 'Submission date and time (computed)', '_id', 'Unique ID (computed)', 'Interviewer']
-        for question in sorted_questions:
-            if question['group_code'] != GC_CONTACT:
-                sorted_codes.append(f'{ question["group_code"] }/{ question["question_code"] }')
-                sorted_labels.append(question['question_label'])
+        for question in flat_questions:
+            if 'type' in question:
+                # question is a question
+                new_code = '/'.join([question['group_code'], question['code']])
             else:
-                contact_codes.append(f'{ question["group_code"] }/{ question["question_code"] }')
-                contact_labels.append(question['question_label'])
+                # question is a choice
+                new_code = '/'.join([question["group_code"], question['question_code'], question["code"]])
+            if 'label' in question:
+                new_label = question['label']
+            else:
+                new_label = question['code']
+            if not question['group_code'].startswith(GC_CONTACT):
+                sorted_codes.append(new_code)
+                sorted_labels.append(new_label)
+            else:
+                contact_codes.append(new_code)
+                contact_labels.append(new_label)
             # Add the unique ID and row # of last response
-            if question['group_code'] == GOOGLE_UNIQUEID_AFTER_GROUP and question['question_code'] == GOOGLE_UNIQUEID_AFTER_QUESTION:
+            if question['group_code'] == GOOGLE_UNIQUEID_AFTER_GROUP and question['code'] == GOOGLE_UNIQUEID_AFTER_QUESTION:
                 sorted_codes.append('')
                 sorted_labels.append('Unique ID (computed)')
                 sorted_codes.append('')
@@ -343,206 +472,141 @@ try:
             contact_codes,
             contact_labels
         ]
-        request_body = {
-            "range": 'Data (labeled)',
-            "majorDimension": 'ROWS',
-            'values': sorted_values
-        }
-        request = sheet.values().append(spreadsheetId=GOOGLE_SHEET_IDS['CLEANEDDATA'], range='Data (labeled)', valueInputOption='USER_ENTERED', insertDataOption='INSERT_ROWS', body=request_body)
-        response = request.execute()
-        request_body = {
-            "range": 'Data (codes)',
-            "majorDimension": 'ROWS',
-            'values': sorted_values
-        }
-        request = sheet.values().append(spreadsheetId=GOOGLE_SHEET_IDS['CLEANEDDATA'], range='Data (codes)', valueInputOption='USER_ENTERED', insertDataOption='INSERT_ROWS', body=request_body)
-        response = request.execute()
-        request_body = {
-            "range": 'Data (labeled)',
-            "majorDimension": 'ROWS',
-            'values': contact_values
-        }
-        request = sheet.values().append(spreadsheetId=GOOGLE_SHEET_IDS['S70'], range='Data (labeled)', valueInputOption='USER_ENTERED', insertDataOption='INSERT_ROWS', body=request_body)
-        response = request.execute()
-        request_body = {
-            "range": 'Data (codes)',
-            "majorDimension": 'ROWS',
-            'values': contact_values
-        }
-        request = sheet.values().append(spreadsheetId=GOOGLE_SHEET_IDS['S70'], range='Data (codes)', valueInputOption='USER_ENTERED', insertDataOption='INSERT_ROWS', body=request_body)
-        response = request.execute()
+        for sheet_range in ['Data (labeled)', 'Data (codes)']:
+            request_body = {
+                "range": sheet_range,
+                "majorDimension": 'ROWS',
+                'values': sorted_values
+            }
+            request = sheet.values().append(spreadsheetId=GOOGLE_SHEET_IDS['CLEANEDDATA'], range=sheet_range, valueInputOption='USER_ENTERED', insertDataOption='INSERT_ROWS', body=request_body)
+            response = request.execute()
+        for sheet_range in ['Data (labeled)', 'Data (codes)']:
+            request_body = {
+                "range": sheet_range,
+                "majorDimension": 'ROWS',
+                'values': contact_values
+            }
+            request = sheet.values().append(spreadsheetId=GOOGLE_SHEET_IDS['S70'], range=sheet_range, valueInputOption='USER_ENTERED', insertDataOption='INSERT_ROWS', body=request_body)
+            response = request.execute()
         exit()
         
-    if new_data_online['count'] > 0 or new_data_interview['count'] > 0:
-        if debug: print(f'Labeling { new_data_online["count"] } online reults and { new_data_interview["count"] } interview results')
+    if new_submissions > 0:
+        if debug: print(f'Labeling { new_submissions } submissions')
         # Concatenate the results from both versions and sort by submission time
-        new_results = kobo.sort_results_by_time(new_data_online['results'] + new_data_interview['results'])
         # Add the labels for questions and choices
-        
         labeled_results = []
-        for result in new_results: # new_results is a list of list of dicts
-            # Unpack answers to select_multiple questions
-            labeled_results.append(kobo.label_result(unlabeled_result=result, choice_lists=choice_lists, questions=questions, unpack_multiples=True))
+        for i in range(0, len(new_data)):
+            for result in new_data[i]['results']:
+                labeled_results.append(kobo.label_result(unlabeled_result=result, choice_lists=choice_lists, questions=questions_list[i], unpack_multiples=True))
+        labeled_results = sorted(labeled_results, key=lambda result: result['meta']['_submission_time'])
         
-        # Add results data LABELS
-        if debug: print(f'Uploading { len(labeled_results) } to Data (labeled)')
-        upload_values = []
-        contact_upload_values = []
-        for labeled_result in labeled_results:
-            if labeled_result['meta']['_version_'] in GOOGLE_VERSION_DICT:
-                version = GOOGLE_VERSION_DICT[labeled_result['meta']['_version_']]
-            else:
-                version = 'NEW'
-            result_values = [labeled_result['meta']['_submission_time'], GOOGLE_DATETIME_FORMULA, GOOGLE_DATE_FORMULA, labeled_result['meta']['_version_'], version, labeled_result['meta']['_id']]
-            if GC_INTRO in labeled_result['questions'] and QC_INTERVIEWER in labeled_result['questions'][GC_INTRO]['questions']:
-                interviewer = labeled_result['questions'][GC_INTRO]['questions'][QC_INTERVIEWER]['answer_code']
-            else:
-                interviewer = ''
-            contact_values = [labeled_result['meta']['_submission_time'], GOOGLE_DATETIME_FORMULA, labeled_result['meta']['_id'], getUniqueId(labeled_result), interviewer]
-            for question in sorted_questions:
-                if question['group_code'] in labeled_result['questions'] and question['question_code'] in labeled_result['questions'][question['group_code']]['questions']:
-                    new_value = labeled_result['questions'][question['group_code']]['questions'][question['question_code']]['answer_label']
-                    if question['group_code'] != GC_CONTACT:
-                        result_values.append(new_value)
-                    else:
-                        contact_values.append(new_value)
+        # Unpack and upload results
+        for sheet_range in ['Data (labeled)', 'Data (codes)']:
+            if debug: print(f'Uploading {new_submissions} submissions to {sheet_range}')
+            upload_values = []
+            contact_upload_values = []
+            for labeled_result in labeled_results:
+                if '_version_' in labeled_result['meta'] and labeled_result['meta']['_version_'] in GOOGLE_VERSION_DICT:
+                    version = GOOGLE_VERSION_DICT[labeled_result['meta']['_version_']]
+                    version_ = labeled_result['meta']['_version_']
+                elif '__version__' in labeled_result['meta'] and labeled_result['meta']['__version__'] in GOOGLE_VERSION_DICT:
+                    version = GOOGLE_VERSION_DICT[labeled_result['meta']['__version__']]
+                    version_ = labeled_result['meta']['__version__']
                 else:
-                    if question['group_code'] != GC_CONTACT:
-                        result_values.append('')
-                    else:
-                        contact_values.append('')
-                # Add the unique ID and row # of last response
-                if question['group_code'] == GOOGLE_UNIQUEID_AFTER_GROUP and question['question_code'] == GOOGLE_UNIQUEID_AFTER_QUESTION:
-                    result_values.append(getUniqueId(labeled_result))
-                    result_values.append(GOOGLE_LATEST_RESPONSE_FORMULA)
-            upload_values.append(result_values)
-            contact_upload_values.append(contact_values)
-        
-        #print('!')
-        #print('.')
-        #print('!')
-        
-        request_body = {
-            "range": 'Data (labeled)',
-            "majorDimension": 'ROWS',
-            'values': upload_values
-        }
-        request = sheet.values().append(spreadsheetId=GOOGLE_SHEET_IDS['CLEANEDDATA'], range='Data (labeled)', valueInputOption='USER_ENTERED', insertDataOption='INSERT_ROWS', body=request_body)
-        response = request.execute()
-        
-        request_body = {
-            "range": 'Data (labeled)',
-            "majorDimension": 'ROWS',
-            'values': contact_upload_values
-        }
-        request = sheet.values().append(spreadsheetId=GOOGLE_SHEET_IDS['S70'], range='Data (labeled)', valueInputOption='USER_ENTERED', insertDataOption='INSERT_ROWS', body=request_body)
-        response = request.execute()
-        
-        # Add results data CODES
-        if debug: print(f'Uploading { len(labeled_results) } to Data (codes)')
-        upload_values = []
-        contact_upload_values = []
-        for labeled_result in labeled_results:
-            if labeled_result['meta']['_version_'] in GOOGLE_VERSION_DICT:
-                version = GOOGLE_VERSION_DICT[labeled_result['meta']['_version_']]
-            else:
-                version = 'NEW'
-            result_values = [labeled_result['meta']['_submission_time'], GOOGLE_DATETIME_FORMULA, GOOGLE_DATE_FORMULA, labeled_result['meta']['_version_'], version, labeled_result['meta']['_id']]
-            if GC_INTRO in labeled_result['questions'] and QC_INTERVIEWER in labeled_result['questions'][GC_INTRO]['questions']:
-                interviewer = labeled_result['questions'][GC_INTRO]['questions'][QC_INTERVIEWER]['answer_code']
-            else:
-                interviewer = ''
-            contact_values = [labeled_result['meta']['_submission_time'], GOOGLE_DATETIME_FORMULA, labeled_result['meta']['_id'], getUniqueId(labeled_result), interviewer]
-            for question in sorted_questions:
-                if question['group_code'] in labeled_result['questions'] and question['question_code'] in labeled_result['questions'][question['group_code']]['questions']:
-                    new_value = labeled_result['questions'][question['group_code']]['questions'][question['question_code']]['answer_code']
-                    if question['group_code'] != GC_CONTACT:
-                        result_values.append(new_value)
-                    else:
-                        contact_values.append(new_value)
+                    version = 'NEW'
+                    version_ = 'N/A'
+                result_values = [labeled_result['meta']['_submission_time'], GOOGLE_DATETIME_FORMULA, GOOGLE_DATE_FORMULA, version_, version, labeled_result['meta']['_id']]
+                if '/'.join([GC_INTRO, QC_INTERVIEWER]) in labeled_result['results']:
+                    interviewer = labeled_result['results']['/'.join([GC_INTRO, QC_INTERVIEWER])]['answer_code']
                 else:
-                    if question['group_code'] != GC_CONTACT:
-                        result_values.append('')
+                    interviewer = ''
+                contact_values = [labeled_result['meta']['_submission_time'], GOOGLE_DATETIME_FORMULA, labeled_result['meta']['_id'], getUniqueId(labeled_result), interviewer]
+                for question in flat_questions:
+                    new_values = []
+                    if 'type' in question:
+                        # question is a question, not a choice
+                        results_code = '/'.join([question['group_code'], question['code']])
+                        if results_code in labeled_result['results']:
+                            if sheet_range == 'Data (labeled)':
+                                new_values.append(labeled_result['results'][results_code]['answer_label'])
+                            else:
+                                new_values.append(labeled_result['results'][results_code]['answer_code'])
+                        else:
+                            new_values.append('')
                     else:
-                        contact_values.append('')
-                # Add unique ID and row # of last response
-                if question['group_code'] == GOOGLE_UNIQUEID_AFTER_GROUP and question['question_code'] == GOOGLE_UNIQUEID_AFTER_QUESTION:
-                    result_values.append(getUniqueId(labeled_result))
-                    result_values.append(GOOGLE_LATEST_RESPONSE_FORMULA)
-            upload_values.append(result_values)
-            contact_upload_values.append(contact_values)
-        
-        request_body = {
-            "range": 'Data (codes)',
-            "majorDimension": 'ROWS',
-            'values': upload_values
-        }
-        request = sheet.values().append(spreadsheetId=GOOGLE_SHEET_IDS['CLEANEDDATA'], range='Data (codes)', valueInputOption='USER_ENTERED', insertDataOption='INSERT_ROWS', body=request_body)
-        response = request.execute()
-        
-        request_body = {
-            "range": 'Data (codes)',
-            "majorDimension": 'ROWS',
-            'values': contact_upload_values
-        }
-        request = sheet.values().append(spreadsheetId=GOOGLE_SHEET_IDS['S70'], range='Data (codes)', valueInputOption='USER_ENTERED', insertDataOption='INSERT_ROWS', body=request_body)
-        response = request.execute()
+                        # question is a choice
+                        results_code = '/'.join([question['group_code'], question['question_code']])
+                        if results_code in labeled_result['results'] and question['code'] in labeled_result['results'][results_code]['choices']:
+                            if sheet_range == 'Data (labeled)':
+                                new_values.append(labeled_result['results'][results_code]['choices'][question['code']]['answer_label'])
+                            else:
+                                new_values.append(labeled_result['results'][results_code]['choices'][question['code']]['answer_code'])
+                        else:
+                            new_values.append('')
+                    if not question['group_code'].startswith(GC_CONTACT):
+                        result_values += new_values
+                    else:
+                        contact_values += new_values
+                    # Add the unique ID and row # of last response
+                    if question['group_code'] == GOOGLE_UNIQUEID_AFTER_GROUP and question['code'] == GOOGLE_UNIQUEID_AFTER_QUESTION:
+                        result_values.append(getUniqueId(labeled_result))
+                        result_values.append(GOOGLE_LATEST_RESPONSE_FORMULA)
+                upload_values.append(result_values)
+                contact_upload_values.append(contact_values)
+            
+            #print('!')
+            #print('.')
+            #print('!')
+            
+            request_body = {
+                "range": sheet_range,
+                "majorDimension": 'ROWS',
+                'values': upload_values
+            }
+            request = sheet.values().append(spreadsheetId=GOOGLE_SHEET_IDS['CLEANEDDATA'], range=sheet_range, valueInputOption='USER_ENTERED', insertDataOption='INSERT_ROWS', body=request_body)
+            response = request.execute()
+            
+            request_body = {
+                "range": sheet_range,
+                "majorDimension": 'ROWS',
+                'values': contact_upload_values
+            }
+            request = sheet.values().append(spreadsheetId=GOOGLE_SHEET_IDS['S70'], range=sheet_range, valueInputOption='USER_ENTERED', insertDataOption='INSERT_ROWS', body=request_body)
+            response = request.execute()
         
         # Update partner list
         upload_values = []
         for labeled_result in labeled_results:
-            if GC_CONTACT in labeled_result['questions'] and QC_PARTNER in labeled_result['questions'][GC_CONTACT]['questions'] and labeled_result['questions'][GC_CONTACT]['questions'][QC_PARTNER]['answer_code'] == '01':
+            if '/'.join([GC_CONTACT, QC_PARTNER]) in labeled_result['results'] and labeled_result['results']['/'.join([GC_CONTACT, QC_PARTNER])]['answer_code'] == '01':
                 if debug: print('Found new partner!')
                 # Person wants to partner -> add to the partner list
-                upload_row = [None] * (columnToIndex('U') + 1) # Data list for columns A to U
+                upload_row = [None] * (columnToIndex('K') + 1) # Data list for columns A to K
                 
                 timestring = labeled_result['meta']['_submission_time']
                 timeobj = datetime.fromisoformat(timestring)
                 upload_row[columnToIndex('A')] = (timeobj + timedelta(hours=8)).date().isoformat()
                 
-                upload_row[columnToIndex('F')] = getUniqueId(labeled_result)
+                upload_row[columnToIndex('B')] = getUniqueId(labeled_result)
                 
-                upload_row[columnToIndex('M')] = labeled_result['questions'][GC_CONTACT]['questions'][QC_PARTNER]['answer_label']
+                upload_row[columnToIndex('C')] = labeled_result['results']['/'.join([GC_CONTACT, QC_PARTNER])]['answer_label']
                 
-                try:
-                    upload_row[columnToIndex('N')] = labeled_result['questions'][GC_CONTACT]['questions'][QC_ORGNAME]['answer_code']
-                except KeyError as err:
-                    if debug: print('KeyError in partner_org/N', err)
-                
-                try:
-                    upload_row[columnToIndex('O')] = labeled_result['questions'][GC_CONTACT]['questions'][QC_EMAIL]['answer_code']
-                except KeyError as err:
-                    if debug: print('KeyError in email/O', err)
-                
-                try:
-                    upload_row[columnToIndex('P')] = labeled_result['questions'][GC_CONTACT]['questions'][QC_WHATSAPP]['answer_code']
-                except KeyError as err:
-                    if debug: print('KeyError in whatsapp/P', err)
-                
-                try:
-                    upload_row[columnToIndex('Q')] = labeled_result['questions'][GC_CONTACT]['questions'][QC_TELEGRAM]['answer_code']
-                except KeyError as err:
-                    if debug: print('KeyError in telegram/Q', err)
-                
-                try:
-                    upload_row[columnToIndex('R')] = labeled_result['questions'][GC_CONTACT]['questions'][QC_FACEBOOK]['answer_code']
-                except KeyError as err:
-                    if debug: print('KeyError in facebook/R', err)
-                
-                try:
-                    upload_row[columnToIndex('S')] = labeled_result['questions'][GC_CONTACT]['questions'][QC_VIBER]['answer_code']
-                except KeyError as err:
-                    if debug: print('KeyError in viber/S', err)
-                
-                try:
-                    upload_row[columnToIndex('T')] = labeled_result['questions'][GC_CONTACT]['questions'][QC_SMS]['answer_code']
-                except KeyError as err:
-                    if debug: print('KeyError in sms/T', err)
-                
-                try:
-                    upload_row[columnToIndex('U')] = labeled_result['questions'][GC_CONTACT]['questions'][QC_CONTACT_OTHER]['answer_code']
-                except KeyError as err:
-                    if debug: print('KeyError in other/U', err)
+                sheet_columns = [
+                    (GC_CONTACT, QC_ORGNAME),
+                    (GC_CONTACT, QC_EMAIL),
+                    (GC_CONTACT, QC_WHATSAPP),
+                    (GC_CONTACT, QC_TELEGRAM),
+                    (GC_CONTACT, QC_FACEBOOK),
+                    (GC_CONTACT, QC_VIBER),
+                    (GC_CONTACT, QC_SMS),
+                    (GC_CONTACT, QC_CONTACT_OTHER),
+                ]
+                column_index = columnToIndex('D')
+                for group, question in sheet_columns:
+                    try:
+                        upload_row[column_index] = labeled_result['results']['/'.join([group, question])]['answer_label']
+                    except KeyError as err:
+                        if debug: print(f'KeyError in partner sheet, question {question}:', err)
+                    column_index += 1
                 
                 upload_values.append(upload_row)
         
@@ -562,7 +626,7 @@ try:
         upload_values = []
         for labeled_result in labeled_results:
             # Send copy of responses
-            if GC_CONTACT in labeled_result['questions'] and QC_COPY in labeled_result['questions'][GC_CONTACT]['questions'] and labeled_result['questions'][GC_CONTACT]['questions'][QC_COPY]['answer_code'] == '01':
+            if '/'.join([GC_CONTACT, QC_COPY]) in labeled_result['results'] and labeled_result['results']['/'.join([GC_CONTACT, QC_COPY])]['answer_code'] == '01':
                 if debug: print('Copy requested!')
                 
                 def templatedebug(text):
@@ -580,6 +644,7 @@ try:
                     autoescape = jinja2.select_autoescape(['html', 'xml'])
                 )
                 template_env.filters['debug'] = debug
+                template_env.globals['getLabel'] = getLabel
                 html_template = template_env.get_template('mailtemplate.html')
                 txt_template = template_env.get_template('mailtemplate.txt')
                 pdf_template = template_env.get_template('pdftemplate.html')
@@ -589,17 +654,17 @@ try:
                 
                 locale.setlocale(locale.LC_ALL, 'en_SG.UTF-8')
                 
-                next_date = nextDate(labeled_result['meta']['_submission_time'], int(labeled_result['questions']['S70']['questions']['again']['answer_code']))
+                next_date = nextDate(labeled_result['meta']['_submission_time'], int(labeled_result['results']['/'.join([GC_CONTACT, QC_AGAIN])]['answer_code']))
                 
                 template_data = {
                     'questions': questions,
-                    'sorted_questions': sorted_questions,
+                    'flat_questions': flat_questions,
                     'labeled_result': labeled_result,
                     'next_date': next_date,
                     'styles': styles
                 }
                 
-                if QC_EMAIL in labeled_result['questions'][GC_CONTACT]['questions']:
+                if '/'.join([GC_CONTACT, QC_EMAIL]) in labeled_result['results']:
                     # Send email automatically
                     html = html_template.render(template_data)
                     txt = txt_template.render(template_data)
@@ -611,7 +676,7 @@ try:
                     from email.utils import make_msgid
                     
                     sender_email = 'covidsgsurvey@washinseasia.org'
-                    receiver_email = labeled_result['questions'][GC_CONTACT]['questions'][QC_EMAIL]['answer_label']
+                    receiver_email = labeled_result['results']['/'.join([GC_CONTACT, QC_EMAIL])]['answer_label']
                     #receiver_email = 'heiko@rothkranz.net'
                     '''Format of gmail-credentials.json:
                     {
@@ -620,11 +685,13 @@ try:
                     }'''
                     with open('gmail-credentials.json', 'r') as gmail_credentials_file:
                         gmail_credentials = json.load(gmail_credentials_file)
-                    #user = '40784a442d78cc'
-                    #password = '2c2ea9a8135d5c'
-                    #server = 'smtp.mailtrap.io'
                     server = 'smtp.gmail.com'
                     port = 465
+                    #gmail_credentials = {
+                    #    'user': '40784a442d78cc',
+                    #    'password': '2c2ea9a8135d5c'
+                    #}
+                    #server = 'smtp.mailtrap.io'
                     
                     message = MIMEMultipart("alternative")
                     message["Subject"] = "Your responses - Survey on COVID-19 behaviours in Singapore"
@@ -673,11 +740,12 @@ try:
             #print('-')
             #print('/')
             
-            if [getUniqueId(labeled_result)] in uidlist or (GC_INTRO in labeled_result['questions'] and QC_BEFORE in labeled_result['questions'][GC_INTRO]['questions'] and labeled_result['questions'][GC_INTRO]['questions'][QC_BEFORE]['answer_code'] == '01') or (GC_CONTACT in labeled_result['questions'] and QC_AGAIN in labeled_result['questions'][GC_CONTACT]['questions'] and labeled_result['questions'][GC_CONTACT]['questions'][QC_AGAIN]['answer_code'] != '00'):
+            ######## LIST OF REPEATS ########
+            if [getUniqueId(labeled_result)] in uidlist or ('/'.join([GC_INTRO, QC_BEFORE]) in labeled_result['results'] and labeled_result['results']['/'.join([GC_INTRO, QC_BEFORE])]['answer_code'] == '01') or ('/'.join([GC_CONTACT, QC_AGAIN]) in labeled_result['results'] and labeled_result['results']['/'.join([GC_CONTACT, QC_AGAIN])]['answer_code'] != '00'):
                 # Respondent has answered before, claims to have answered before or wants to do the survey again
                 if debug: print('Found (potential) repeat respondent!')
                 # Add to repeat respondent list
-                upload_row = [None] * (columnToIndex('U') + 1) # Data list for columns A to U
+                upload_row = [None] * (columnToIndex('M') + 1) # Data list for columns A to M
                 
                 timestring = labeled_result['meta']['_submission_time']
                 timeobj = datetime.fromisoformat(timestring)
@@ -686,60 +754,26 @@ try:
                 
                 upload_row[columnToIndex('B')] = getUniqueId(labeled_result)
                 
-                try:
-                    upload_row[columnToIndex('E')] = labeled_result['questions'][GC_CONTACT]['questions'][QC_AGAIN]['answer_label']
-                except KeyError as err:
-                    if debug: print('KeyError in again/E and T', err)
-                
-                try:
-                    upload_row[columnToIndex('F')] = labeled_result['questions'][GC_CONTACT]['questions'][QC_REMIND]['answer_label']
-                except KeyError as err:
-                    if debug: print('KeyError in remind/F', err)
-                
-                try:
-                    upload_row[columnToIndex('G')] = labeled_result['questions'][GC_INTRO]['questions'][QC_INTERVIEWER]['answer_label']
-                except KeyError as err:
-                    if debug: print('KeyError in interviewer/G', err)
-                
-                try:
-                    upload_row[columnToIndex('N')] = labeled_result['questions'][GC_CONTACT]['questions'][QC_EMAIL]['answer_label']
-                except KeyError as err:
-                    if debug: print('KeyError in email/N', err)
-                
-                try:
-                    upload_row[columnToIndex('O')] = labeled_result['questions'][GC_CONTACT]['questions'][QC_WHATSAPP]['answer_code']
-                except KeyError as err:
-                    if debug: print('KeyError in whatsapp/O', err)
-                
-                try:
-                    upload_row[columnToIndex('P')] = labeled_result['questions'][GC_CONTACT]['questions'][QC_TELEGRAM]['answer_code']
-                except KeyError as err:
-                    if debug: print('KeyError in telegram/P', err)
-                
-                try:
-                    upload_row[columnToIndex('Q')] = labeled_result['questions'][GC_CONTACT]['questions'][QC_FACEBOOK]['answer_code']
-                except KeyError as err:
-                    if debug: print('KeyError in facebook/Q', err)
-                
-                try:
-                    upload_row[columnToIndex('R')] = labeled_result['questions'][GC_CONTACT]['questions'][QC_VIBER]['answer_code']
-                except KeyError as err:
-                    if debug: print('KeyError in viber/R', err)
-                
-                try:
-                    upload_row[columnToIndex('S')] = labeled_result['questions'][GC_CONTACT]['questions'][QC_SMS]['answer_code']
-                except KeyError as err:
-                    if debug: print('KeyError in sms/S', err)
-                
-                try:
-                    upload_row[columnToIndex('T')] = labeled_result['questions'][GC_CONTACT]['questions'][QC_CONTACT_OTHER]['answer_code']
-                except KeyError as err:
-                    if debug: print('KeyError in other/T', err)
-                
-                try:
-                    upload_row[columnToIndex('U')] = labeled_result['questions'][GC_ABOUT]['questions'][QC_NATIONALITY]['answer_label']
-                except KeyError as err:
-                    if debug: print('KeyError in nationality/U', err)
+                sheet_columns = [
+                    (GC_CONTACT, QC_AGAIN),
+                    (GC_CONTACT, QC_REMIND),
+                    (GC_INTRO, QC_INTERVIEWER),
+                    (GC_CONTACT, QC_EMAIL),
+                    (GC_CONTACT, QC_WHATSAPP),
+                    (GC_CONTACT, QC_TELEGRAM),
+                    (GC_CONTACT, QC_FACEBOOK),
+                    (GC_CONTACT, QC_VIBER),
+                    (GC_CONTACT, QC_SMS),
+                    (GC_CONTACT, QC_CONTACT_OTHER),
+                    (GC_ABOUT, QC_NATIONALITY),
+                ]
+                column_index = columnToIndex('C')
+                for group, question in sheet_columns:
+                    try:
+                        upload_row[column_index] = labeled_result['results']['/'.join([group, question])]['answer_label']
+                    except KeyError as err:
+                        if debug: print(f'KeyError in repeats sheet, question {question}:', err)
+                    column_index += 1
                 
                 request_body = {
                     "range": 'List of repeats',

@@ -1,25 +1,23 @@
 Survey on COVID-19 behaviours in Singapore
 ******************************************
 
-Thank you for participating in our survey. {% if labeled_result.questions.S70.questions.again.answer_code != '00' %}You offered to take the survey again in {{ labeled_result.questions.S70.questions.again.answer_code | int }}{% if labeled_result.questions.S70.questions.again.answer_code == '01' %}week's{% else %}weeks'{% endif %} time. On {{ next_date }}, please go to https://rebrand.ly/covidsgsurvey-enSR and participate again.{% endif %}
+Thank you for participating in our survey. {% if labeled_result['results']['S70/again']['answer_code'] != '00' %}You offered to take the survey again in {{ labeled_result['results']['S70/again']['answer_code'] | int }}{% if labeled_result['results']['S70/again']['answer_code'] == '01' %}week's{% else %}weeks'{% endif %} time. On {{ next_date }}, please go to https://rebrand.ly/covidsgsurvey-enSR and participate again.{% endif %}
 
 As requested, here's a copy of your responses:
 {% set ns = namespace(current_group = '') -%}
-{%- for question in sorted_questions -%}
-    {%- if question['group_code'] != 'S00' and question['group_code'] in labeled_result['questions'] -%}
+{%- for question in flat_questions -%}
+    {%- if ('type' in question and '/'.join([question['group_code'], question['code']]) in labeled_result['results']) or ('type' not in question and '/'.join([question['group_code'], question['question_code']]) in labeled_result['results'] and 'choices' in labeled_result['results']['/'.join([question['group_code'], question['question_code']])] and question['code'] in labeled_result['results']['/'.join([question['group_code'], question['question_code']])]['choices']) -%}
         {%- if question['group_code'] != ns.current_group -%}
             {%- if ns.current_group != '' %}
             {% endif -%}
             {%- set ns.current_group = question['group_code'] %}
-{{ questions[ns.current_group].label }}
-{% for i in range(0, questions[ns.current_group].label|length) %}*{% endfor %}
+{{ getLabel(questions, ns.current_group) }}
+{% for i in range(0, getLabel(questions, ns.current_group)|length) %}*{% endfor %}
         {%- endif -%}
-        {%- if question.question_code in labeled_result['questions'][ns.current_group]['questions'] -%}
-            {%- if questions[ns.current_group]['questions'][question.question_code]['type'] == 'select_multiple' %}
-{{ question.question_label }}
-            {%- else %}
-{% if questions[ns.current_group]['questions'][question.question_code]['type'] == 'select_multiple_option' %}- {% endif %}{{ question.question_label }}{% if not (question.question_label.endswith(':') or question.question_label.endswith('?')) %}:{% endif %} {{ labeled_result['questions'][ns.current_group]['questions'][question.question_code]['answer_label'] }}
-            {%- endif -%}
+        {%- if 'type' in question and question['type'] == 'select_multiple' %}
+{{ question.label }}
+        {%- else %}
+{% if 'type' not in question %}- {% endif %}{{ question.label }}{% if not (question.label.endswith(':') or question.label.endswith('?')) %}:{% endif %} {% if 'type' in question %}{{ labeled_result['results']['/'.join([question['group_code'], question['code']])]['answer_label'] }}{% else %}{{ labeled_result['results']['/'.join([question['group_code'], question['question_code']])]['choices'][question['code']]['answer_label'] }}{% endif %}
         {%- endif -%}
     {%- endif -%}
 {%- endfor %}
