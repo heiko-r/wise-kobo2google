@@ -357,12 +357,15 @@ try:
             'v6kNJDKrrcEaxeBC6q4yyX': 'v4-i',
             'vAtyPtYBTyGBjgCHtU6nnK': 'v28',
             'v6TWK7RVicgPemLR6QzdQ4': 'v5-i',
+            'vx9VE7g4ZdkiPt9S5G8HgR': 'v29',
+            'vTLWtFpJETVBLGyY64y5iM': 'v6-i',
+            'vfAt6ncFCDobgnEmVE532p': 'v30',
         }
         GOOGLE_UNIQUEID_AFTER_GROUP = 'S60'
         GOOGLE_UNIQUEID_AFTER_QUESTION = 'ID5'
         
-        GOOGLE_COLUMN_UNIQUEID = 'KQ'
-        GOOGLE_COLUMN_LATESTRESPONSE = 'KR'
+        GOOGLE_COLUMN_UNIQUEID = 'JH'
+        GOOGLE_COLUMN_LATESTRESPONSE = 'JI'
         GOOGLE_LATEST_RESPONSE_FORMULA = f'=if(INDIRECT({GOOGLE_COLUMN_LATESTRESPONSE}$1&ROW())="","",max(arrayformula(if({GOOGLE_COLUMN_UNIQUEID}:{GOOGLE_COLUMN_UNIQUEID}=INDIRECT({GOOGLE_COLUMN_LATESTRESPONSE}$1&ROW()),row({GOOGLE_COLUMN_UNIQUEID}:{GOOGLE_COLUMN_UNIQUEID})))))'
         
         GC_CONTACT = 'S70'
