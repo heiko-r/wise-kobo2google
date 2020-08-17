@@ -16,7 +16,7 @@ As requested, here's a copy of your responses:
         {%- endif -%}
         {%- if 'type' in question and question['type'] == 'select_multiple' %}
 {{ question.label }}
-        {%- else %}
+        {%- elif 'type' not in question or question['type'] != 'calculate' %}
 {% if 'type' not in question %}- {% endif %}{{ question.label }}{% if not (question.label.endswith(':') or question.label.endswith('?')) %}:{% endif %} {% if 'type' in question %}{{ labeled_result['results']['/'.join([question['group_code'], question['code']])]['answer_label'] }}{% else %}{{ labeled_result['results']['/'.join([question['group_code'], question['question_code']])]['choices'][question['code']]['answer_label'] }}{% endif %}
         {%- endif -%}
     {%- endif -%}

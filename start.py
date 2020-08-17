@@ -243,6 +243,8 @@ try:
     asset_uids = [
         'argHw9ZzcAtcmEytJbWQo7', # online version
         'aAYAW5qZHEcroKwvEq8pRb', # interview version
+        'aKAexXkCDUM5WbL3jQW2V5', # DSM version
+        'aXbWBpzEm8xZyatgciGnEd', # TWC2 version
     ]
     
     if debug: print('Kobo: Checking for new data')
@@ -258,7 +260,17 @@ try:
     # Get new submissions since last handled submission time
     new_data = []
     for asset_uid in asset_uids:
-        new_data.append(kobo.get_data(asset_uid, submitted_after=last_submit_time))
+        asset_data = kobo.get_data(asset_uid, submitted_after=last_submit_time)
+        if asset_uid == 'aAYAW5qZHEcroKwvEq8pRb':
+            # Special treatment for interview version
+            # Move S40/residence, S40/residence_99 to S10/residence, S10/residence_99
+            if 'S40/residence' in asset_data['results']:
+                asset_data['results']['S10/residence'] = asset_data['results']['S40/residence']
+                del asset_data['results']['S40/residence']
+            if 'S40/residence_99' in asset_data['results']:
+                asset_data['results']['S10/residence_99'] = asset_data['results']['S40/residence_99']
+                del asset_data['results']['S40/residence_99']
+        new_data.append(asset_data)
     #new_data_online = kobo.get_data(asset_uid_online, query='{"_submission_time": {"$gt": "2020-06-08T05:40:54", "$lt": "2020-06-08T06:11:09"}}')
     
     new_submissions = 0
@@ -286,7 +298,15 @@ try:
         ######## QUESTIONS ########
         questions_list = []
         for asset in assets:
-            questions_list.append(kobo.get_questions(asset=asset, unpack_multiples=True))
+            asset_questions = kobo.get_questions(asset=asset, unpack_multiples=True)
+            if asset['uid'] == 'aAYAW5qZHEcroKwvEq8pRb':
+                # Special treatment for interview version
+                # Move S40/residence, S40/residence_99 to S10/residence, S10/residence_99
+                asset_questions['groups']['S10']['questions']['residence'] = asset_questions['groups']['S40']['questions']['residence']
+                asset_questions['groups']['S10']['questions']['residence_99'] = asset_questions['groups']['S40']['questions']['residence_99']
+                del asset_questions['groups']['S40']['questions']['residence']
+                del asset_questions['groups']['S40']['questions']['residence_99']
+            questions_list.append(asset_questions)
         questions = mergeQuestions(*questions_list)
         
         ## Remove all questions without labels or of the following types
@@ -360,12 +380,17 @@ try:
             'vx9VE7g4ZdkiPt9S5G8HgR': 'v29',
             'vTLWtFpJETVBLGyY64y5iM': 'v6-i',
             'vfAt6ncFCDobgnEmVE532p': 'v30',
+            'vHTNob6PmRp47CagSqrePt': 'v31',
+            'vZ3kcYASkiWzdZbUzq3Xf9': 'v2-dsm',
+            'vpKMUDvHe2BDri6MuqeL6s': 'v7-i',
+            'vm6oMVrEYvLm833Z3UmHWT': 'v3-twc2',
+            'vjqirEyxbRaEeSwaMWqwLL': 'v4-twc2',
         }
         GOOGLE_UNIQUEID_AFTER_GROUP = 'S60'
         GOOGLE_UNIQUEID_AFTER_QUESTION = 'ID5'
         
-        GOOGLE_COLUMN_UNIQUEID = 'JH'
-        GOOGLE_COLUMN_LATESTRESPONSE = 'JI'
+        GOOGLE_COLUMN_UNIQUEID = 'JZ'
+        GOOGLE_COLUMN_LATESTRESPONSE = 'KA'
         GOOGLE_LATEST_RESPONSE_FORMULA = f'=if(INDIRECT({GOOGLE_COLUMN_LATESTRESPONSE}$1&ROW())="","",max(arrayformula(if({GOOGLE_COLUMN_UNIQUEID}:{GOOGLE_COLUMN_UNIQUEID}=INDIRECT({GOOGLE_COLUMN_LATESTRESPONSE}$1&ROW()),row({GOOGLE_COLUMN_UNIQUEID}:{GOOGLE_COLUMN_UNIQUEID})))))'
         
         GC_CONTACT = 'S70'

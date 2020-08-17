@@ -93,7 +93,7 @@
         <tr class='qheader' style='{{ styles.tr_qheader}}'>
             <td colspan='2' style='{{ styles.td }}'>{{ question.label }}</td>
         </tr>
-        {%- else %}
+        {%- elif 'type' not in question or question['type'] != 'calculate' %}
         <tr {% if 'type' not in question %}class='level-2'{% endif %} style='{{ styles.tr }}'>
             <td class='question' style='{% if 'type' not in question %}{{ styles.td_question_level2 }}{% else %}{{ styles.td_question }}{% endif %}'>{{ question.label }}</td>
             <td class='answer' style='{{ styles.td }}'>{% if 'type' in question %}{{ labeled_result['results']['/'.join([question['group_code'], question['code']])]['answer_label'] }}{% else %}{{ labeled_result['results']['/'.join([question['group_code'], question['question_code']])]['choices'][question['code']]['answer_label'] }}{% endif %}</td>
