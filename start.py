@@ -386,6 +386,7 @@ try:
             'vm6oMVrEYvLm833Z3UmHWT': 'v3-twc2',
             'vjqirEyxbRaEeSwaMWqwLL': 'v4-twc2',
             'vcPgrbRYNhLvZD3wEQQkd3': 'v5-twc2',
+            'vjYKbRn8YkfoEi94DZDU97': 'v6-twc2',
         }
         GOOGLE_UNIQUEID_AFTER_GROUP = 'S60'
         GOOGLE_UNIQUEID_AFTER_QUESTION = 'ID5'
@@ -774,7 +775,7 @@ try:
                 # Respondent has answered before, claims to have answered before or wants to do the survey again
                 if debug: print('Found (potential) repeat respondent!')
                 # Add to repeat respondent list
-                upload_row = [None] * (columnToIndex('M') + 1) # Data list for columns A to M
+                upload_row = [None] * (columnToIndex('N') + 1) # Data list for columns A to N
                 
                 timestring = labeled_result['meta']['_submission_time']
                 timeobj = datetime.fromisoformat(timestring)
@@ -784,6 +785,7 @@ try:
                 upload_row[columnToIndex('B')] = getUniqueId(labeled_result)
                 
                 sheet_columns = [
+                    (GC_INTRO, QC_BEFORE),
                     (GC_CONTACT, QC_AGAIN),
                     (GC_CONTACT, QC_REMIND),
                     (GC_INTRO, QC_INTERVIEWER),
