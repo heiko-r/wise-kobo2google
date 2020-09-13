@@ -270,6 +270,10 @@ try:
             if 'S40/residence_99' in asset_data['results']:
                 asset_data['results']['S10/residence_99'] = asset_data['results']['S40/residence_99']
                 del asset_data['results']['S40/residence_99']
+            # Move S10/email to S70/email
+            if 'S10/email' in asset_data['results']:
+                asset_data['results']['S70/email'] = asset_data['results']['S10/email']
+                del asset_data['results']['S10/email']
         new_data.append(asset_data)
     #new_data_online = kobo.get_data(asset_uid_online, query='{"_submission_time": {"$gt": "2020-06-08T05:40:54", "$lt": "2020-06-08T06:11:09"}}')
     
@@ -387,6 +391,11 @@ try:
             'vjqirEyxbRaEeSwaMWqwLL': 'v4-twc2',
             'vcPgrbRYNhLvZD3wEQQkd3': 'v5-twc2',
             'vjYKbRn8YkfoEi94DZDU97': 'v6-twc2',
+            'vJPAyGJKHGNXefNie8Nuaq': 'v7-twc2',
+            'vwcAGGT4juWtYrECiRf7XU': 'v8-twc2',
+            'vMjX3eAnsvNNFVEXLNTQZD': 'v32',
+            'vC9GgrbXQp6fVd2C4PGAt4': 'v3-dsm',
+            'vrJXmnGFxRLEp2CL4bMQqF': 'v8-i',
         }
         GOOGLE_UNIQUEID_AFTER_GROUP = 'S60'
         GOOGLE_UNIQUEID_AFTER_QUESTION = 'ID5'
