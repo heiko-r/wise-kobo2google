@@ -5,10 +5,11 @@ import sys
 from koboextractor import KoboExtractor
 import sqlite3
 import time
-import pickle # for Google auth
+#import pickle # for Google auth
 import json
 from googleapiclient.discovery import build
-from google_auth_oauthlib.flow import InstalledAppFlow
+#from google_auth_oauthlib.flow import InstalledAppFlow
+import google.oauth2.credentials
 from google.auth.transport.requests import Request
 from googleapiclient.http import MediaIoBaseUpload
 import string
@@ -264,16 +265,20 @@ try:
         if asset_uid == 'aAYAW5qZHEcroKwvEq8pRb':
             # Special treatment for interview version
             # Move S40/residence, S40/residence_99 to S10/residence, S10/residence_99
-            if 'S40/residence' in asset_data['results']:
-                asset_data['results']['S10/residence'] = asset_data['results']['S40/residence']
-                del asset_data['results']['S40/residence']
-            if 'S40/residence_99' in asset_data['results']:
-                asset_data['results']['S10/residence_99'] = asset_data['results']['S40/residence_99']
-                del asset_data['results']['S40/residence_99']
-            # Move S10/email to S70/email
-            if 'S10/email' in asset_data['results']:
-                asset_data['results']['S70/email'] = asset_data['results']['S10/email']
-                del asset_data['results']['S10/email']
+            for result in asset_data['results']:
+                if 'S40/residence' in result:
+                    print("Found S40/residence")
+                    result['S10/residence'] = result['S40/residence']
+                    del result['S40/residence']
+                if 'S40/residence_99' in result:
+                    print("Found S40/residence_99")
+                    result['S10/residence_99'] = result['S40/residence_99']
+                    del result['S40/residence_99']
+                # Move S10/email to S70/email
+                if 'S10/email' in result:
+                    print("Found S10/email")
+                    result['S70/email'] = result['S10/email']
+                    del result['S10/email']
         new_data.append(asset_data)
     #new_data_online = kobo.get_data(asset_uid_online, query='{"_submission_time": {"$gt": "2020-06-08T05:40:54", "$lt": "2020-06-08T06:11:09"}}')
     
@@ -306,10 +311,13 @@ try:
             if asset['uid'] == 'aAYAW5qZHEcroKwvEq8pRb':
                 # Special treatment for interview version
                 # Move S40/residence, S40/residence_99 to S10/residence, S10/residence_99
+                # Move S10/email to S70/email
                 asset_questions['groups']['S10']['questions']['residence'] = asset_questions['groups']['S40']['questions']['residence']
                 asset_questions['groups']['S10']['questions']['residence_99'] = asset_questions['groups']['S40']['questions']['residence_99']
+                asset_questions['groups']['S70']['questions']['email'] = asset_questions['groups']['S10']['questions']['email']
                 del asset_questions['groups']['S40']['questions']['residence']
                 del asset_questions['groups']['S40']['questions']['residence_99']
+                del asset_questions['groups']['S10']['questions']['email']
             questions_list.append(asset_questions)
         questions = mergeQuestions(*questions_list)
         
@@ -396,6 +404,14 @@ try:
             'vMjX3eAnsvNNFVEXLNTQZD': 'v32',
             'vC9GgrbXQp6fVd2C4PGAt4': 'v3-dsm',
             'vrJXmnGFxRLEp2CL4bMQqF': 'v8-i',
+            'vzpv5jeqgRpX6jDzBqxUVY': 'v33',
+            'vnxPqQeWqgDbMkEKPG6Qo6': 'v9-twc2',
+            'voYSHveEczpYBdWEJqKWvc': 'v4-dsm',
+            'veGqP9bqcGBwRyRbwthwvX': 'v9-i',
+            'viCb3faKAu4UQuiokmoQyZ': 'v10-i',
+            'v5eQCAnx6QNRvvrYX89whb': 'v10-twc2',
+            'vfsJCoq3dS4B5iHXHh4k4M': 'v5-dsm',
+            'vYWjoWYNYymVsZ46EF5rSU': 'v34',
         }
         GOOGLE_UNIQUEID_AFTER_GROUP = 'S60'
         GOOGLE_UNIQUEID_AFTER_QUESTION = 'ID5'
@@ -431,37 +447,22 @@ try:
         QC_BEFORE = 'S10Q05'
         QC_INTERVIEWER = 'interviewer'
         
-        """Shows basic usage of the Sheets API.
-        Prints values from a sample spreadsheet.
-        """
-        creds = None
-        # The file token.pickle stores the user's access and refresh tokens, and is
-        # created automatically when the authorization flow completes for the first
-        # time.
-        if os.path.exists('googletoken.pickle'):
-            with open('googletoken.pickle', 'rb') as token:
-                if debug: print('Loading Google token from file')
-                creds = pickle.load(token)
-        # If there are no (valid) credentials available, let the user log in.
-        if not creds or not creds.valid:
-            if creds and creds.expired and creds.refresh_token:
-                if debug: print('Refreshing token')
-                creds.refresh(Request())
-            else:
-                if debug: print('Loading Google secrets from file')
-                # Download this credentials file from Google
-                flow = InstalledAppFlow.from_client_secrets_file(
-                    'google-api-credentials.json', GOOGLE_SCOPES)
-                creds = flow.run_local_server(port=0)
-            # Save the credentials for the next run
-            with open('googletoken.pickle', 'wb') as token:
-                if debug: print('Saving new token')
-                pickle.dump(creds, token)
+        # Set up Google API authentication
+        with open('google_tokens.json', 'r') as tokenfile:
+            google_tokens = json.load(tokenfile)
+        creds = google.oauth2.credentials.Credentials(
+            None,
+            refresh_token=google_tokens['refresh_token'],
+            token_uri=google_tokens['token_uri'],
+            client_id=google_tokens['client_id'],
+            client_secret=google_tokens['client_secret']
+        )
         
-        service = build('sheets', 'v4', credentials=creds)
+        # Create the Google Sheets API
+        sheets_service = build('sheets', 'v4', credentials=creds)
         
         # Call the Sheets API
-        sheet = service.spreadsheets()
+        sheet = sheets_service.spreadsheets()
         
         # Get list of existing UniqueIDs for later
         uidresult = sheet.values().get(spreadsheetId=GOOGLE_SHEET_IDS['CLEANEDDATA'], range=f'Data (labeled)!{GOOGLE_COLUMN_UNIQUEID}4:{GOOGLE_COLUMN_UNIQUEID}').execute()

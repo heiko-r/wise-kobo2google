@@ -4,6 +4,7 @@ gmail-credentials.json
 google-api-credentials.json
 google-sheet-ids.json
 googletoken.pickle
+google_tokens.json
 kobo-credentials.json
 kobo.db
 test/
