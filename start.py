@@ -718,16 +718,16 @@ try:
                     sender_email = 'covidsgsurvey@washinseasia.org'
                     receiver_email = labeled_result['results']['/'.join([GC_CONTACT, QC_EMAIL])]['answer_label']
                     #receiver_email = 'heiko@rothkranz.net'
-                    '''Format of gmail-credentials.json:
+                    '''Format of smtp-credentials.json:
                     {
-                        "user": "user@example.com",
+                        "user": "username",
                         "password": "safEpa55w0rd"
                     }'''
-                    with open('gmail-credentials.json', 'r') as gmail_credentials_file:
-                        gmail_credentials = json.load(gmail_credentials_file)
-                    server = 'smtp.gmail.com'
+                    with open('smtp-credentials.json', 'r') as smtp_credentials_file:
+                        smtp_credentials = json.load(smtp_credentials_file)
+                    server = 'smtp.emaillabs.net.pl'
                     port = 465
-                    #gmail_credentials = {
+                    #smtp_credentials = {
                     #    'user': '40784a442d78cc',
                     #    'password': '2c2ea9a8135d5c'
                     #}
@@ -751,7 +751,7 @@ try:
                     with smtplib.SMTP_SSL(server, port, context=context) as server:
                     #with smtplib.SMTP(server, port) as server:
                         #server.starttls(context=context)
-                        server.login(gmail_credentials['user'], gmail_credentials['password'])
+                        server.login(smtp_credentials['user'], smtp_credentials['password'])
                         server.sendmail(
                             sender_email, receiver_email, message.as_string()
                         )
