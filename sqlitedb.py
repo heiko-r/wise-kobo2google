@@ -3,7 +3,7 @@
 import sqlite3
 
 # Enable for verbose debug logging (disabled by default)
-g_EnableDebugMsg = True
+g_EnableDebugMsg = False
 
 '''
 Function to connect to SQLite database and return a connection object.
