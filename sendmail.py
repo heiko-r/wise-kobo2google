@@ -39,10 +39,10 @@ def connect_smtp(server, port, encryption, user, password):
     try:
         conn.login(user, password)
     except smtplib.SMTPAuthenticationError as error:
-        printf(f"Error: Invalid credentials for SMTP server, error: {str(error)}")
+        print(f"Error: Invalid credentials for SMTP server, error: {str(error)}")
         return None
     except smtplib.SMTPException as error:
-        printf(f"Error: Exception caught while logging into SMTP server, error: {str(error)}")
+        print(f"Error: Exception caught while logging into SMTP server, error: {str(error)}")
         return None
     
     return conn
