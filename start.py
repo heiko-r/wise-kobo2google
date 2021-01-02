@@ -19,6 +19,8 @@ import locale
 import pdfkit
 from io import BytesIO
 
+import sqlitedb
+
 # check for inhibit file
 if os.path.isfile('inhibit'):
     exit()
@@ -218,18 +220,13 @@ def getLabel(merged_questions, group_code, question_code=None, choice_code=None)
                                     return labelOrCode(choice, choice_code)
     
 try:
-    conn = sqlite3.connect('kobo.db')
-    db = conn.cursor()
+    conn = sqlitedb.connect_db('kobo.db')
+    rowCount = sqlitedb.exec_sql(conn, f"UPDATE lastrun SET lasttime = { time.time() }")
     
-    # Create table if it does not exist yet
-    db.execute("SELECT name FROM sqlite_master WHERE type='table' and name='lastrun'")
-    if not db.fetchall():
-        print("Setting up database")
-        db.execute("CREATE TABLE lastrun (lasttime int, lastsubmit text)")
-        db.execute("INSERT INTO lastrun VALUES (0, '')")
-    
-    db.execute(f"UPDATE lastrun SET lasttime = { time.time() }")
-    
+    # Get last handled submission time
+    last_submit_time = sqlitedb.exec_sql(conn, "SELECT lastsubmit FROM lastrun")[0][0]
+    if debug: print(f'Last submit time: { last_submit_time }')
+
     '''Get the token from https://kf.kobotoolbox.org/token/
     Format for kobo-credentials.json:
     {
@@ -249,15 +246,6 @@ try:
     ]
     
     if debug: print('Kobo: Checking for new data')
-    # Get last handled submission time
-    db.execute("SELECT lastsubmit FROM lastrun")
-    db_result = db.fetchall()
-    if not db_result:
-        last_submit_time = None
-    else:
-        last_submit_time = db_result[0][0]
-    if debug: print(f'Last submit time: { last_submit_time }')
-    
     # Get new submissions since last handled submission time
     new_data = []
     for asset_uid in asset_uids:
@@ -824,9 +812,8 @@ try:
                 request = sheet.values().append(spreadsheetId=GOOGLE_SHEET_IDS['CONTACTS'], range='List of repeats', valueInputOption='USER_ENTERED', insertDataOption='INSERT_ROWS', body=request_body)
                 response = request.execute()
         
-        db.execute(f"UPDATE lastrun SET lastsubmit = '{ labeled_results[-1]['meta']['_submission_time'] }'")
-        conn.commit()
-        conn.close()
+        rowCount = sqlitedb.exec_sql(conn, f"UPDATE lastrun SET lastsubmit = '{ labeled_results[-1]['meta']['_submission_time'] }'")
+        sqlitedb.disconnect_db(conn)
         
         #print('3')
         #print('2')
