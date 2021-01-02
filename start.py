@@ -19,11 +19,38 @@ import googlesheets
 
 # Global Constants
 KOBO_CREDENTIAL_FILE_NAME = 'kobo-credentials.json'
-GOOGLE_SHEET_IDS_FILE_NAME = 'google-sheet-ids.json'
+GOOGLE_SHEET_IDS_FILE_NAME = 'test-google-sheet-ids.json' # TODO: Change this back before deploying
 GOOGLE_TOKENS_FILE_NAME = 'google_tokens.json'
 MAIL_TEMPLATE_STYLES_FILE_NAME = 'mailtemplate-styles.json'
 SMTP_CREDENTIALS_FILE_NAME = 'smtp-credentials.json'
 INHIBIT_FILE_NAME = 'inhibit'
+
+GC_CONTACT = 'S70'
+QC_VOLUNTEER = 'volunteer'
+QC_PARTNER = 'partner'
+QC_ORGNAME = 'partner_org'
+QC_EMAIL = 'email'
+QC_WHATSAPP = 'whatsapp'
+QC_TELEGRAM = 'telegram'
+QC_FACEBOOK = 'fb'
+QC_VIBER = 'viber'
+QC_SMS = 'sms'
+QC_CONTACT_OTHER = 'other'
+QC_COPY = 'copy'
+QC_AGAIN = 'again'
+QC_REMIND = 'remind'
+GC_ID = 'S60'
+QC_ID1 = 'ID1'
+QC_ID2 = 'ID2'
+QC_ID3 = 'ID3'
+QC_ID4 = 'ID4'
+QC_ID5 = 'ID5'
+GC_ABOUT = 'S40'
+QC_AGE = 'age'
+QC_NATIONALITY = 'nationality'
+GC_INTRO = 'S10'
+QC_BEFORE = 'S10Q05'
+QC_INTERVIEWER = 'interviewer'
 
 # Global variables
 debug = False
@@ -272,6 +299,8 @@ def printMsgAndQuit(message, errorCode=-1):
 Main function
 '''
 def main(argv):
+    global GC_CONTACT, QC_VOLUNTEER, QC_PARTNER, QC_ORGNAME, QC_EMAIL, QC_WHATSAPP, QC_TELEGRAM, QC_FACEBOOK, QC_VIBER, QC_SMS, QC_CONTACT_OTHER, QC_COPY, QC_AGAIN, QC_REMIND, GC_ID, QC_ID1, QC_ID2, QC_ID3, QC_ID4, QC_ID5, GC_ABOUT, QC_AGE, QC_NATIONALITY, GC_INTRO, QC_BEFORE, QC_INTERVIEWER
+    
     # Check environment
     checkEnvironment()
 
@@ -293,7 +322,7 @@ def main(argv):
         {
             "token": "0b3bc87dbaa7ef82ad00411e791537581c409e48"
         }'''
-        with open('kobo-credentials.json', 'r') as kobo_credentials_file:
+        with open(KOBO_CREDENTIAL_FILE_NAME, 'r') as kobo_credentials_file:
             KOBO_TOKEN = json.load(kobo_credentials_file)['token']
 
         kobo = KoboExtractor(KOBO_TOKEN, 'https://kf.kobotoolbox.org/api/v2', debug=debug)
@@ -309,7 +338,9 @@ def main(argv):
         # Get new submissions since last handled submission time
         new_data = []
         for asset_uid in asset_uids:
-            asset_data = kobo.get_data(asset_uid, submitted_after=last_submit_time)
+            # TODO: Change back to this original line before deploying:
+            #asset_data = kobo.get_data(asset_uid, submitted_after=last_submit_time)
+            asset_data = kobo.get_data(asset_uid, query='{"_id":80353595}') # Get one of Heiko's responses for v34
             if asset_uid == 'aAYAW5qZHEcroKwvEq8pRb':
                 # Special treatment for interview version
                 # Move S40/residence, S40/residence_99 to S10/residence, S10/residence_99
@@ -394,7 +425,7 @@ def main(argv):
                 "CONTACTS": "1pMETsSB08C40_y_dCVGGRIxAGhMb5N0TQ53EoOzN0gg",
                 "S70": "1zYWFfCYTLHicHxdd7AA2pIHcKbQUfRNMOl8Gk9GoINM"
             }'''
-            with open('google-sheet-ids.json', 'r') as google_sheet_ids_file:
+            with open(GOOGLE_SHEET_IDS_FILE_NAME, 'r') as google_sheet_ids_file:
                 GOOGLE_SHEET_IDS = json.load(google_sheet_ids_file)
 
             GOOGLE_DATETIME_FORMULA = '=(TEXT(LEFT(INDIRECT("A"&ROW()),10),"yyyy-mm-dd ")&TEXT(RIGHT(INDIRECT("A"&ROW()),8),"hh:mm:ss"))+8/24'
@@ -461,34 +492,6 @@ def main(argv):
             GOOGLE_COLUMN_UNIQUEID = 'JZ'
             GOOGLE_COLUMN_LATESTRESPONSE = 'KA'
             GOOGLE_LATEST_RESPONSE_FORMULA = f'=if(INDIRECT({GOOGLE_COLUMN_LATESTRESPONSE}$1&ROW())="","",max(arrayformula(if({GOOGLE_COLUMN_UNIQUEID}:{GOOGLE_COLUMN_UNIQUEID}=INDIRECT({GOOGLE_COLUMN_LATESTRESPONSE}$1&ROW()),row({GOOGLE_COLUMN_UNIQUEID}:{GOOGLE_COLUMN_UNIQUEID})))))'
-
-            GC_CONTACT = 'S70'
-            QC_VOLUNTEER = 'volunteer'
-            QC_PARTNER = 'partner'
-            QC_ORGNAME = 'partner_org'
-            QC_EMAIL = 'email'
-            QC_WHATSAPP = 'whatsapp'
-            QC_TELEGRAM = 'telegram'
-            QC_FACEBOOK = 'fb'
-            QC_VIBER = 'viber'
-            QC_SMS = 'sms'
-            QC_CONTACT_OTHER = 'other'
-            QC_COPY = 'copy'
-            QC_AGAIN = 'again'
-            QC_REMIND = 'remind'
-            GC_ID = 'S60'
-            QC_ID1 = 'ID1'
-            QC_ID2 = 'ID2'
-            QC_ID3 = 'ID3'
-            QC_ID4 = 'ID4'
-            QC_ID5 = 'ID5'
-            GC_ABOUT = 'S40'
-            QC_AGE = 'age'
-            QC_NATIONALITY = 'nationality'
-            GC_INTRO = 'S10'
-            QC_BEFORE = 'S10Q05'
-            QC_INTERVIEWER = 'interviewer'
-
 
             # Get list of existing UniqueIDs for later
             uidlist = googlesheets.read_column(GOOGLE_SHEET_IDS['CLEANEDDATA'], 'Data (labeled)', GOOGLE_COLUMN_UNIQUEID, 4)
@@ -738,7 +741,7 @@ def main(argv):
                         try:
                             upload_row[column_index] = labeled_result['results']['/'.join([group, question])]['answer_label']
                         except KeyError as err:
-                            debugMsg(f'KeyError in repeats sheet, question {question}:', err)
+                            debugMsg(f'KeyError in repeats sheet, question {question}: ' + str(err))
                         column_index += 1
 
                     googlesheets.append_rows(GOOGLE_SHEET_IDS['CONTACTS'], 'List of repeats', [upload_row])
