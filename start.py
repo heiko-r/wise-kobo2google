@@ -21,6 +21,7 @@ import sqlitedb
 import sendmail
 import copyofresponses
 import pdfcopy
+import googledrive
 
 # check for inhibit file
 if os.path.isfile('inhibit'):
@@ -691,14 +692,8 @@ try:
                     pdfhtml = copyofresponses.get_pdfhtml(labeled_result, questions, flat_questions, codes_constants)
                     fh = pdfcopy.create_pdf(pdfhtml)
                     filename = f'{ getUniqueId(labeled_result) }.pdf'
-                    drive_service = build('drive', 'v3', credentials=creds)
-                    file_metadata = {
-                        'name': filename,
-                        'parents': ['1zzWDH0Iltzp6cU9jqacF9MmLR3NT2SSx']
-                    }
-                    media = MediaIoBaseUpload(fh, mimetype='application/pdf')
-                    file = drive_service.files().create(body=file_metadata, media_body=media, fields='id', supportsAllDrives=True).execute()
-                    if debug: print(f'File ID: { file.get("id") }')
+                    drive_file = googledrive.upload_file(filename, fh)
+                    if debug: print(f'File ID on Google Drive: { drive_file.get("id") }')
             
             #print('\\')
             #print('-')
