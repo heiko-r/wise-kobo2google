@@ -3,13 +3,10 @@
 import os
 import sys
 from koboextractor import KoboExtractor
-import sqlite3
 import time
 import json
 import string
 from datetime import datetime, timedelta
-import jinja2
-import locale
 
 import sqlitedb
 import sendmail
@@ -54,9 +51,6 @@ def getUniqueId(labeled_result):
         if debug: print('KeyError in Unique ID', err)
         uniqueId = ''
     return uniqueId
-
-def nextDate(submission_time_iso, weeks):
-    return (datetime.fromisoformat(submission_time_iso) + timedelta(days=weeks*7, hours=8)).strftime('%A, %d %B')
 
 def flattenQuestions(group_list):
     # Put all questions and choices from all groups into one list
