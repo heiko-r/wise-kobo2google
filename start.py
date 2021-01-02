@@ -21,6 +21,7 @@ from io import BytesIO
 
 import sqlitedb
 import sendmail
+import copyofresponses
 
 # check for inhibit file
 if os.path.isfile('inhibit'):
@@ -657,49 +658,18 @@ try:
             # Send copy of responses
             if '/'.join([GC_CONTACT, QC_COPY]) in labeled_result['results'] and labeled_result['results']['/'.join([GC_CONTACT, QC_COPY])]['answer_code'] == '01':
                 if debug: print('Copy requested!')
-                
-                def templatedebug(text):
-                    """Filter for debugging templates.
-                    
-                    Callable by Jinja2 templates.
-                    Usage, e.g.: {{ questions.S70.questions.age.answer_code | templatedebug }}
-                    """
-                    print(text)
-                    return ''
-                
-                template_loader = jinja2.FileSystemLoader('./')
-                template_env = jinja2.Environment(
-                    loader = template_loader,
-                    autoescape = jinja2.select_autoescape(['html', 'xml'])
-                )
-                template_env.filters['debug'] = debug
-                template_env.globals['getLabel'] = getLabel
-                html_template = template_env.get_template('mailtemplate.html')
-                txt_template = template_env.get_template('mailtemplate.txt')
-                pdf_template = template_env.get_template('pdftemplate.html')
-                
-                with open('mailtemplate-styles.json', 'r') as jsonfile:
-                    styles = json.load(jsonfile)
-                
-                locale.setlocale(locale.LC_ALL, 'en_SG.UTF-8')
-                
-                next_date = nextDate(labeled_result['meta']['_submission_time'], int(labeled_result['results']['/'.join([GC_CONTACT, QC_AGAIN])]['answer_code']))
-                
-                template_data = {
-                    'questions': questions,
-                    'flat_questions': flat_questions,
-                    'labeled_result': labeled_result,
-                    'next_date': next_date,
-                    'styles': styles
-                }
-                
                 if '/'.join([GC_CONTACT, QC_EMAIL]) in labeled_result['results']:
                     # Send email automatically
                     sender_email = 'covidsgsurvey@washinseasia.org'
                     receiver_email = labeled_result['results']['/'.join([GC_CONTACT, QC_EMAIL])]['answer_label']
                     subject = "Your responses - Survey on COVID-19 behaviours in Singapore"
-                    html = html_template.render(template_data)
-                    txt = txt_template.render(template_data)
+
+                    codes_constants = {
+                        'GC_CONTACT': 'S70',
+                        'QC_AGAIN': 'again'
+                    } # TODO: This dict is only temporary while refactoring
+                    html = copyofresponses.get_html(labeled_result, questions, flat_questions, codes_constants)
+                    txt = copyofresponses.get_txt(labeled_result, questions, flat_questions, codes_constants)
 
                     if debug: print(f'Sending mail to { receiver_email }')
 
@@ -715,7 +685,11 @@ try:
                 else:
                     # no email address -> create PDF and add respondent to the list of copies to be sent
                     if debug: print('Copy requested, but no email given!')
-                    pdfhtml = pdf_template.render(template_data)
+                    codes_constants = {
+                        'GC_CONTACT': 'S70',
+                        'QC_AGAIN': 'again'
+                    } # TODO: This dict is only temporary while refactoring
+                    pdfhtml = copyofresponses.get_pdfhtml(labeled_result, questions, flat_questions, codes_constants)
                     if debug:
                         pdfoptions = {}
                     else:
