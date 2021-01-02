@@ -5,13 +5,7 @@ import sys
 from koboextractor import KoboExtractor
 import sqlite3
 import time
-#import pickle # for Google auth
 import json
-from googleapiclient.discovery import build
-#from google_auth_oauthlib.flow import InstalledAppFlow
-import google.oauth2.credentials
-from google.auth.transport.requests import Request
-from googleapiclient.http import MediaIoBaseUpload
 import string
 from datetime import datetime, timedelta
 import jinja2
@@ -22,6 +16,7 @@ import sendmail
 import copyofresponses
 import pdfcopy
 import googledrive
+import googlesheets
 
 # check for inhibit file
 if os.path.isfile('inhibit'):
@@ -327,7 +322,6 @@ try:
         flat_questions = flattenQuestions(questions)
         
         ######## INITIALISE GOOGLE ########
-        if debug: print('Initialising Google Sheets API')
         # Push data to Google Sheets
         
         '''The Google Sheet ID show in the URL when you open a spreadsheet.
@@ -339,11 +333,6 @@ try:
         }'''
         with open('google-sheet-ids.json', 'r') as google_sheet_ids_file:
             GOOGLE_SHEET_IDS = json.load(google_sheet_ids_file)
-        
-        GOOGLE_SCOPES = [
-            'https://www.googleapis.com/auth/spreadsheets',
-            'https://www.googleapis.com/auth/drive'
-        ]
         
         GOOGLE_DATETIME_FORMULA = '=(TEXT(LEFT(INDIRECT("A"&ROW()),10),"yyyy-mm-dd ")&TEXT(RIGHT(INDIRECT("A"&ROW()),8),"hh:mm:ss"))+8/24'
         GOOGLE_DATE_FORMULA = '=(TEXT(LEFT(INDIRECT("B"&ROW()),10),"yyyy-mm-dd "))'
@@ -437,26 +426,9 @@ try:
         QC_BEFORE = 'S10Q05'
         QC_INTERVIEWER = 'interviewer'
         
-        # Set up Google API authentication
-        with open('google_tokens.json', 'r') as tokenfile:
-            google_tokens = json.load(tokenfile)
-        creds = google.oauth2.credentials.Credentials(
-            None,
-            refresh_token=google_tokens['refresh_token'],
-            token_uri=google_tokens['token_uri'],
-            client_id=google_tokens['client_id'],
-            client_secret=google_tokens['client_secret']
-        )
-        
-        # Create the Google Sheets API
-        sheets_service = build('sheets', 'v4', credentials=creds)
-        
-        # Call the Sheets API
-        sheet = sheets_service.spreadsheets()
         
         # Get list of existing UniqueIDs for later
-        uidresult = sheet.values().get(spreadsheetId=GOOGLE_SHEET_IDS['CLEANEDDATA'], range=f'Data (labeled)!{GOOGLE_COLUMN_UNIQUEID}4:{GOOGLE_COLUMN_UNIQUEID}').execute()
-        uidlist = uidresult.get('values', [])
+        uidlist = googlesheets.read_column(GOOGLE_SHEET_IDS['CLEANEDDATA'], 'Data (labeled)', GOOGLE_COLUMN_UNIQUEID, 4)
         if debug:
             print("List of UIDs:")
             pprint.pprint(uidlist)
@@ -503,21 +475,9 @@ try:
             contact_labels
         ]
         for sheet_range in ['Data (labeled)', 'Data (codes)']:
-            request_body = {
-                "range": sheet_range,
-                "majorDimension": 'ROWS',
-                'values': sorted_values
-            }
-            request = sheet.values().append(spreadsheetId=GOOGLE_SHEET_IDS['CLEANEDDATA'], range=sheet_range, valueInputOption='USER_ENTERED', insertDataOption='INSERT_ROWS', body=request_body)
-            response = request.execute()
+            googlesheets.append_rows(GOOGLE_SHEET_IDS['CLEANEDDATA'], sheet_range, sorted_values)
         for sheet_range in ['Data (labeled)', 'Data (codes)']:
-            request_body = {
-                "range": sheet_range,
-                "majorDimension": 'ROWS',
-                'values': contact_values
-            }
-            request = sheet.values().append(spreadsheetId=GOOGLE_SHEET_IDS['S70'], range=sheet_range, valueInputOption='USER_ENTERED', insertDataOption='INSERT_ROWS', body=request_body)
-            response = request.execute()
+            googlesheets.append_rows(GOOGLE_SHEET_IDS['S70'], sheet_range, contact_values)
         exit()
         
     if new_submissions > 0:
@@ -588,21 +548,8 @@ try:
             #print('.')
             #print('!')
             
-            request_body = {
-                "range": sheet_range,
-                "majorDimension": 'ROWS',
-                'values': upload_values
-            }
-            request = sheet.values().append(spreadsheetId=GOOGLE_SHEET_IDS['CLEANEDDATA'], range=sheet_range, valueInputOption='USER_ENTERED', insertDataOption='INSERT_ROWS', body=request_body)
-            response = request.execute()
-            
-            request_body = {
-                "range": sheet_range,
-                "majorDimension": 'ROWS',
-                'values': contact_upload_values
-            }
-            request = sheet.values().append(spreadsheetId=GOOGLE_SHEET_IDS['S70'], range=sheet_range, valueInputOption='USER_ENTERED', insertDataOption='INSERT_ROWS', body=request_body)
-            response = request.execute()
+            googlesheets.append_rows(GOOGLE_SHEET_IDS['CLEANEDDATA'], sheet_range, upload_values)
+            googlesheets.append_rows(GOOGLE_SHEET_IDS['S70'], sheet_range, contact_upload_values)
         
         # Update partner list
         upload_values = []
@@ -641,13 +588,7 @@ try:
                 upload_values.append(upload_row)
         
         if upload_values:
-            request_body = {
-                "range": 'Interested partners',
-                "majorDimension": 'ROWS',
-                'values': upload_values
-            }
-            request = sheet.values().append(spreadsheetId=GOOGLE_SHEET_IDS['CONTACTS'], range='Interested partners', valueInputOption='USER_ENTERED', insertDataOption='INSERT_ROWS', body=request_body)
-            response = request.execute()
+            googlesheets.append_rows(GOOGLE_SHEET_IDS['CONTACTS'], 'Interested partners', upload_values)
         
         #print('-')
         #print('/')
@@ -735,13 +676,7 @@ try:
                         if debug: print(f'KeyError in repeats sheet, question {question}:', err)
                     column_index += 1
                 
-                request_body = {
-                    "range": 'List of repeats',
-                    "majorDimension": 'ROWS',
-                    'values': [upload_row]
-                }
-                request = sheet.values().append(spreadsheetId=GOOGLE_SHEET_IDS['CONTACTS'], range='List of repeats', valueInputOption='USER_ENTERED', insertDataOption='INSERT_ROWS', body=request_body)
-                response = request.execute()
+                googlesheets.append_rows(GOOGLE_SHEET_IDS['CONTACTS'], 'List of repeats', [upload_row])
         
         rowCount = sqlitedb.exec_sql(conn, f"UPDATE lastrun SET lastsubmit = '{ labeled_results[-1]['meta']['_submission_time'] }'")
         sqlitedb.disconnect_db(conn)
