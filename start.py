@@ -20,6 +20,7 @@ import pdfkit
 from io import BytesIO
 
 import sqlitedb
+import sendmail
 
 # check for inhibit file
 if os.path.isfile('inhibit'):
@@ -694,56 +695,23 @@ try:
                 
                 if '/'.join([GC_CONTACT, QC_EMAIL]) in labeled_result['results']:
                     # Send email automatically
-                    html = html_template.render(template_data)
-                    txt = txt_template.render(template_data)
-                    # Assemble and send the email
-                    import smtplib, ssl
-                    from email.mime.text import MIMEText
-                    from email.mime.multipart import MIMEMultipart
-                    from email.utils import formatdate
-                    from email.utils import make_msgid
-                    
                     sender_email = 'covidsgsurvey@washinseasia.org'
                     receiver_email = labeled_result['results']['/'.join([GC_CONTACT, QC_EMAIL])]['answer_label']
-                    #receiver_email = 'heiko@rothkranz.net'
-                    '''Format of smtp-credentials.json:
-                    {
-                        "user": "username",
-                        "password": "safEpa55w0rd"
-                    }'''
+                    subject = "Your responses - Survey on COVID-19 behaviours in Singapore"
+                    html = html_template.render(template_data)
+                    txt = txt_template.render(template_data)
+
+                    if debug: print(f'Sending mail to { receiver_email }')
+
                     with open('smtp-credentials.json', 'r') as smtp_credentials_file:
                         smtp_credentials = json.load(smtp_credentials_file)
                     server = 'smtp.emaillabs.net.pl'
                     port = 465
-                    #smtp_credentials = {
-                    #    'user': '40784a442d78cc',
-                    #    'password': '2c2ea9a8135d5c'
-                    #}
-                    #server = 'smtp.mailtrap.io'
-                    
-                    message = MIMEMultipart("alternative")
-                    message["Subject"] = "Your responses - Survey on COVID-19 behaviours in Singapore"
-                    message["From"] = sender_email
-                    message["To"] = receiver_email
-                    message["Date"] = formatdate(localtime = True)
-                    message["Message-ID"] = make_msgid(domain='washinseasia.org')
-                    
-                    part1 = MIMEText(txt, "plain")
-                    part2 = MIMEText(html, "html")
-                    message.attach(part1)
-                    message.attach(part2)
-                    
-                    if debug: print(f'Sending mail to { receiver_email }')
-                    
-                    context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
-                    with smtplib.SMTP_SSL(server, port, context=context) as server:
-                    #with smtplib.SMTP(server, port) as server:
-                        #server.starttls(context=context)
-                        server.login(smtp_credentials['user'], smtp_credentials['password'])
-                        server.sendmail(
-                            sender_email, receiver_email, message.as_string()
-                        )
-                    if debug: print('Mail sent!')
+                    smtp_conn = sendmail.connect_smtp(server, port, sendmail.ENCRYPTION_TLS, smtp_credentials['user'], smtp_credentials['password'])
+                    recipients = sendmail.send_email(smtp_conn, sender_email, receiver_email, subject, txt, html)
+                    if recipients is not None and len(recipients) > 0:
+                        if debug: print('Mail sent!')
+                    sendmail.disconnect_smtp(smtp_conn)
                 else:
                     # no email address -> create PDF and add respondent to the list of copies to be sent
                     if debug: print('Copy requested, but no email given!')
