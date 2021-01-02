@@ -32,6 +32,7 @@ def upload_file(filename, fh):
     media = MediaIoBaseUpload(fh, mimetype='application/pdf')
     file = drive_service.files().create(body=file_metadata, media_body=media, fields='id', supportsAllDrives=True).execute()
     debug_msg(f'File ID: { file.get("id") }')
+    return file
 
 '''
 Prints verbose debug message.
