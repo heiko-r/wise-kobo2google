@@ -16,12 +16,11 @@ import string
 from datetime import datetime, timedelta
 import jinja2
 import locale
-import pdfkit
-from io import BytesIO
 
 import sqlitedb
 import sendmail
 import copyofresponses
+import pdfcopy
 
 # check for inhibit file
 if os.path.isfile('inhibit'):
@@ -690,12 +689,7 @@ try:
                         'QC_AGAIN': 'again'
                     } # TODO: This dict is only temporary while refactoring
                     pdfhtml = copyofresponses.get_pdfhtml(labeled_result, questions, flat_questions, codes_constants)
-                    if debug:
-                        pdfoptions = {}
-                    else:
-                        pdfoptions = {'quiet': ''}
-                    pdfdata = pdfkit.from_string(pdfhtml, False, options=pdfoptions)
-                    fh = BytesIO(pdfdata)
+                    fh = pdfcopy.create_pdf(pdfhtml)
                     filename = f'{ getUniqueId(labeled_result) }.pdf'
                     drive_service = build('drive', 'v3', credentials=creds)
                     file_metadata = {
