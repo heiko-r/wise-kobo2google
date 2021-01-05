@@ -2,20 +2,17 @@
 
 import os
 import sys
-from koboextractor import KoboExtractor
 import time
 import json
-import string
-from datetime import datetime, timedelta
 import pprint
 import requests
 
 import sqlitedb
-import sendmail
 import copyofresponses
-import pdfcopy
-import googledrive
 import googlesheets
+import kobo_import
+import tabularise
+from common import getUniqueId, COLUMNS
 
 # Global Constants
 KOBO_CREDENTIAL_FILE_NAME = 'kobo-credentials.json'
@@ -25,219 +22,10 @@ MAIL_TEMPLATE_STYLES_FILE_NAME = 'mailtemplate-styles.json'
 SMTP_CREDENTIALS_FILE_NAME = 'smtp-credentials.json'
 INHIBIT_FILE_NAME = 'inhibit'
 
-GC_CONTACT = 'S70'
-QC_VOLUNTEER = 'volunteer'
-QC_PARTNER = 'partner'
-QC_ORGNAME = 'partner_org'
-QC_EMAIL = 'email'
-QC_WHATSAPP = 'whatsapp'
-QC_TELEGRAM = 'telegram'
-QC_FACEBOOK = 'fb'
-QC_VIBER = 'viber'
-QC_SMS = 'sms'
-QC_CONTACT_OTHER = 'other'
-QC_COPY = 'copy'
-QC_AGAIN = 'again'
-QC_REMIND = 'remind'
-GC_ID = 'S60'
-QC_ID1 = 'ID1'
-QC_ID2 = 'ID2'
-QC_ID3 = 'ID3'
-QC_ID4 = 'ID4'
-QC_ID5 = 'ID5'
-GC_ABOUT = 'S40'
-QC_AGE = 'age'
-QC_NATIONALITY = 'nationality'
-GC_INTRO = 'S10'
-QC_BEFORE = 'S10Q05'
-QC_INTERVIEWER = 'interviewer'
-
 # Global variables
 debug = False
 add_headers = False
 
-def columnToIndex(column_string):
-    index = -1
-    for i in range(0, len(column_string)): # 0,1,2
-        index += (string.ascii_uppercase.index(column_string[-i-1]) + 1) * (26**i)
-    return index
-
-def getUniqueId(labeled_result):
-    global GC_ID, QC_ID1, QC_ID2, QC_ID3, QC_ID4, QC_ID5, GC_ABOUT, QC_AGE, debug
-    debugMsg('Trying to extract ID')
-    try:
-        id1 = str(labeled_result['results']['/'.join([GC_ID, QC_ID1])]['answer_code']).upper()
-        id2 = "{0:0=2d}".format(int(labeled_result['results']['/'.join([GC_ID, QC_ID2])]['answer_code']))
-        id3 = str(labeled_result['results']['/'.join([GC_ID, QC_ID3])]['answer_code'])
-        id4 = str(labeled_result['results']['/'.join([GC_ID, QC_ID4])]['answer_code'])
-        if '/'.join([GC_ID, QC_ID5]) in labeled_result['results']:
-            id5 = str(labeled_result['results']['/'.join([GC_ID, QC_ID5])]['answer_code'])
-        else:
-            id5 = str(labeled_result['results']['/'.join([GC_ABOUT, QC_AGE])]['answer_code'][-1])
-        debugMsg(f'ID: { id1 + id2 + id3 + id4 + id5 }')
-        uniqueId = id1 + id2 + id3 + id4 + id5
-    except KeyError as err:
-        debugMsg('KeyError in Unique ID', err)
-        uniqueId = ''
-    return uniqueId
-
-def flattenQuestions(group_list):
-    # Put all questions and choices from all groups into one list
-    flat_questions = []
-    for group in group_list:
-        for question in group['questions']:
-            new_question = question
-            new_question['group_code'] = group['code']
-            flat_questions.append(new_question)
-            if question['choices']:
-                for choice in question['choices']:
-                    new_choice = choice
-                    new_choice['group_code'] = group['code']
-                    new_choice['question_code'] = question['code']
-                    flat_questions.append(new_choice)
-    return flat_questions
-
-def mergeQuestions(*questions_dicts):
-    # merge the questions into one.
-    # sequence numbers will be colliding, hence the dicts cannot be simply merged
-    # The first list of questions takes precedence; only additional questions from
-    # the other lists will be added
-    group_list = []
-
-    for questions_dict in questions_dicts:
-        # put all groups in a list:
-        tmp_groups = []
-        for group_code, group_dict in questions_dict['groups'].items():
-            tmp_groups.append({
-                'code': group_code,
-                'sequence': group_dict['sequence'],
-                'label': group_dict['label'],
-                'repeat': group_dict['repeat']
-            })
-        # sort the list by sequence number:
-        sorted_groups = sorted(tmp_groups, key=lambda group: group['sequence'])
-
-        # go through sorted groups and add new ones to group_list:
-        for new_group in sorted_groups:
-            # search group_list for a group with the same code
-            found_group = False
-            for existing_group in group_list:
-                if existing_group['code'] == new_group['code']:
-                    found_group = True
-                    break
-            if not found_group:
-                group_list.append({
-                    'code': new_group['code'],
-                    'label': new_group['label'],
-                    'repeat': new_group['repeat'],
-                    'questions': []
-                })
-
-        # go through each group and add new questions:
-        for group in group_list:
-            if group['code'] in questions_dict['groups'] and 'questions' in questions_dict['groups'][group['code']]:
-                # put all questions in a list:
-                tmp_questions = []
-                for question_code, question_dict in questions_dict['groups'][group['code']]['questions'].items():
-                    if group['code'] == 'S80' and question_code == 'logo': continue # skip strange 'logo' note at the end
-                    tmp_question = {
-                        'code': question_code,
-                        'sequence': question_dict['sequence']
-                    }
-                    if 'label' in question_dict:
-                        tmp_question['label'] = question_dict['label']
-                    if 'type' in question_dict:
-                        tmp_question['type'] = question_dict['type']
-                    tmp_questions.append(tmp_question)
-                # sort the list by sequence number:
-                sorted_questions = sorted(tmp_questions, key=lambda question: question['sequence'])
-
-                # go through sorted questions and add new ones to the group's list of questions:
-                for tmp_question in sorted_questions:
-                    # search existing question list for a question with the same code
-                    found_question = False
-                    for existing_question in group['questions']:
-                        if existing_question['code'] == tmp_question['code']:
-                            found_question = True
-                            break
-                    if not found_question:
-                        new_question = {
-                            'code': tmp_question['code'],
-                            'choices': []
-                        }
-                        if 'label' in tmp_question:
-                            new_question['label'] = tmp_question['label']
-                        if 'type' in tmp_question:
-                            new_question['type'] = tmp_question['type']
-                        group['questions'].append(new_question)
-
-        # go through each question and add new choices:
-        for group in group_list:
-            if group['code'] in questions_dict['groups'] and 'questions' in questions_dict['groups'][group['code']]:
-                for question in group['questions']:
-                    if question['code'] in questions_dict['groups'][group['code']]['questions'] and 'choices' in questions_dict['groups'][group['code']]['questions'][question['code']]:
-                        # put all choices in a list:
-                        tmp_choices = []
-                        for choice_code, choice_dict in questions_dict['groups'][group['code']]['questions'][question['code']]['choices'].items():
-                            tmp_choices.append({
-                                'code': choice_code,
-                                'label': choice_dict['label'],
-                                'sequence': choice_dict['sequence']
-                            })
-                        # sort the list by sequence number:
-                        sorted_choices = sorted(tmp_choices, key=lambda choice: choice['sequence'])
-
-                        # go through sorted choices and add new ones to the question's list of choices:
-                        for new_choice in sorted_choices:
-                            # search existin list for a choice with the same code
-                            found_choice = False
-                            for existing_choice in question['choices']:
-                                if existing_choice['code'] == new_choice['code']:
-                                    found_choice = True
-                                    break
-                            if not found_choice:
-                                question['choices'].append({
-                                    'code': new_choice['code'],
-                                    'label': new_choice['label']
-                                })
-        # TODO: treat 'or other' somehow
-
-    return group_list
-
-def mergeDicts(d1, d2):
-    """
-    Modifies d1 in-place to contain values from d2.  If any value
-    in d1 is a dictionary (or dict-like), *and* the corresponding
-    value in d2 is also a dictionary, then merge them in-place.
-    """
-    for k,v2 in d2.items():
-        v1 = d1.get(k) # returns None if v1 has no value for this key
-        if ( isinstance(v1, dict) and
-             isinstance(v2, dict) ):
-            mergeDicts(v1, v2)
-        else:
-            d1[k] = v2
-
-def getLabel(merged_questions, group_code, question_code=None, choice_code=None):
-    def labelOrCode(item, code):
-        if 'label' in item:
-            return item['label']
-        else:
-            return code
-
-    for group in merged_questions:
-        if group['code'] == group_code:
-            if not question_code:
-                return labelOrCode(group, group_code)
-            else:
-                for question in group['questions']:
-                    if question['code'] == 'question_code':
-                        if not choice_code:
-                            return labelOrCode(question, question_code)
-                        else:
-                            for choice in question['choices']:
-                                if choice['code'] == choice_code:
-                                    return labelOrCode(choice, choice_code)
 
 # Return True if connected to internet, False otherwise.
 def isConnectedToInternet(timeout=5):
@@ -299,8 +87,6 @@ def printMsgAndQuit(message, errorCode=-1):
 Main function
 '''
 def main(argv):
-    global GC_CONTACT, QC_VOLUNTEER, QC_PARTNER, QC_ORGNAME, QC_EMAIL, QC_WHATSAPP, QC_TELEGRAM, QC_FACEBOOK, QC_VIBER, QC_SMS, QC_CONTACT_OTHER, QC_COPY, QC_AGAIN, QC_REMIND, GC_ID, QC_ID1, QC_ID2, QC_ID3, QC_ID4, QC_ID5, GC_ABOUT, QC_AGE, QC_NATIONALITY, GC_INTRO, QC_BEFORE, QC_INTERVIEWER
-    
     # Check environment
     checkEnvironment()
 
@@ -324,8 +110,8 @@ def main(argv):
         }'''
         with open(KOBO_CREDENTIAL_FILE_NAME, 'r') as kobo_credentials_file:
             KOBO_TOKEN = json.load(kobo_credentials_file)['token']
-
-        kobo = KoboExtractor(KOBO_TOKEN, 'https://kf.kobotoolbox.org/api/v2', debug=debug)
+        
+        kobo_import.init_kobo(KOBO_TOKEN)
 
         asset_uids = [
             'argHw9ZzcAtcmEytJbWQo7', # online version
@@ -336,210 +122,51 @@ def main(argv):
 
         debugMsg('Kobo: Checking for new data')
         # Get new submissions since last handled submission time
-        new_data = []
-        for asset_uid in asset_uids:
-            # TODO: Change back to this original line before deploying:
-            #asset_data = kobo.get_data(asset_uid, submitted_after=last_submit_time)
-            asset_data = kobo.get_data(asset_uid, query='{"_id":80353595}') # Get one of Heiko's responses for v34
-            if asset_uid == 'aAYAW5qZHEcroKwvEq8pRb':
-                # Special treatment for interview version
-                # Move S40/residence, S40/residence_99 to S10/residence, S10/residence_99
-                for result in asset_data['results']:
-                    if 'S40/residence' in result:
-                        print("Found S40/residence")
-                        result['S10/residence'] = result['S40/residence']
-                        del result['S40/residence']
-                    if 'S40/residence_99' in result:
-                        print("Found S40/residence_99")
-                        result['S10/residence_99'] = result['S40/residence_99']
-                        del result['S40/residence_99']
-                    # Move S10/email to S70/email
-                    if 'S10/email' in result:
-                        print("Found S10/email")
-                        result['S70/email'] = result['S10/email']
-                        del result['S10/email']
-            new_data.append(asset_data)
-        #new_data_online = kobo.get_data(asset_uid_online, query='{"_submission_time": {"$gt": "2020-06-08T05:40:54", "$lt": "2020-06-08T06:11:09"}}')
+        new_data = kobo_import.get_asset_data(asset_uids)
+        new_submissions = kobo_import.count_submissions(new_data)
 
-        new_submissions = 0
-        for new_data_results in new_data:
-            new_submissions += new_data_results['count']
+        if not (new_submissions > 0 or add_headers):
+            # Nothing to do, exit
+            quitApp(errorCode=0)
 
-        if new_submissions > 0 or add_headers:
-            debugMsg('Kobo: Getting assets')
-            assets = []
-            for asset_uid in asset_uids:
-                assets.append(kobo.get_asset(asset_uid))
+        debugMsg('Kobo: Getting assets')
+        assets = kobo_import.get_assets(asset_uids)
 
-            debugMsg('Kobo: Getting labels for questions, choices and answers')
+        debugMsg('Kobo: Extracting labels for questions, choices and answers')
+        # Extract list of choices
+        choice_lists = kobo_import.get_choice_lists(assets)
+        if debug:
+            print('choice_lists:')
+            pprint.pprint(choice_lists)
+        # Extract and merge questions
+        questions_list = kobo_import.get_questions_list(assets)
+        questions = kobo_import.get_merged_questions(questions_list)
+        if debug:
+            print('Merged questions:')
+            pprint.pprint(questions)
+        # Transform questions into "flat" tabular form
+        flat_questions = tabularise.flatten_questions(questions)
 
-            ######## CHOICES ########
-            # Create dict of of choice options in the form of choice_lists[list_name][answer_code] = answer_label
-            # Merge the choice lists into one, with the first versions taking precedence
-            choice_lists = {}
-            for asset in reversed(assets):
-                mergeDicts(choice_lists, kobo.get_choices(asset))
-            if debug:
-                print('choice_lists:')
-                pprint.pprint(choice_lists)
+        ######## INITIALISE GOOGLE ########
+        # Push data to Google Sheets
 
-            ######## QUESTIONS ########
-            questions_list = []
-            for asset in assets:
-                asset_questions = kobo.get_questions(asset=asset, unpack_multiples=True)
-                if asset['uid'] == 'aAYAW5qZHEcroKwvEq8pRb':
-                    # Special treatment for interview version
-                    # Move S40/residence, S40/residence_99 to S10/residence, S10/residence_99
-                    # Move S10/email to S70/email
-                    asset_questions['groups']['S10']['questions']['residence'] = asset_questions['groups']['S40']['questions']['residence']
-                    asset_questions['groups']['S10']['questions']['residence_99'] = asset_questions['groups']['S40']['questions']['residence_99']
-                    asset_questions['groups']['S70']['questions']['email'] = asset_questions['groups']['S10']['questions']['email']
-                    del asset_questions['groups']['S40']['questions']['residence']
-                    del asset_questions['groups']['S40']['questions']['residence_99']
-                    del asset_questions['groups']['S10']['questions']['email']
-                questions_list.append(asset_questions)
-            questions = mergeQuestions(*questions_list)
-
-            ## Remove all questions without labels or of the following types
-            ## Note: Types in use to keep 'note', 'select_one', 'select_multiple', 'integer', 'text', '_or_other'
-            #delete_types = ['start', 'end', 'today', 'begin_group', 'end_group', 'calculate']
-            #for question_group, question_group_dict in questions.items():
-            #    # The [] part is building a list of question_codes where the question type is in the above delete list
-            #    for question_code in [question_code for question_code, question_dict in question_group_dict['questions'].items() if question_dict['type'] in delete_types]: del questions[question_group]['questions'][question_code]
-            #    for question_code in [question_code for question_code, question_dict in question_group_dict['questions'].items() if 'label' not in question_dict]: del questions[question_group]['questions'][question_code]
-            ## delete empty question groups
-            #for question_group in [question_group for question_group, question_group_dict in questions.items() if not question_group_dict['questions']]: del questions[question_group]
-            if debug:
-                print('Merged questions:')
-                pprint.pprint(questions)
-
-            flat_questions = flattenQuestions(questions)
-
-            ######## INITIALISE GOOGLE ########
-            # Push data to Google Sheets
-
-            '''The Google Sheet ID show in the URL when you open a spreadsheet.
-            Format for google-sheet-ids.json:
-            {
-                "CLEANEDDATA": "1OQ-a9r17VW_y4AeISaLKutNLKBDRw2QePemfYsFrm4k",
-                "CONTACTS": "1pMETsSB08C40_y_dCVGGRIxAGhMb5N0TQ53EoOzN0gg",
-                "S70": "1zYWFfCYTLHicHxdd7AA2pIHcKbQUfRNMOl8Gk9GoINM"
-            }'''
-            with open(GOOGLE_SHEET_IDS_FILE_NAME, 'r') as google_sheet_ids_file:
-                GOOGLE_SHEET_IDS = json.load(google_sheet_ids_file)
-
-            GOOGLE_DATETIME_FORMULA = '=(TEXT(LEFT(INDIRECT("A"&ROW()),10),"yyyy-mm-dd ")&TEXT(RIGHT(INDIRECT("A"&ROW()),8),"hh:mm:ss"))+8/24'
-            GOOGLE_DATE_FORMULA = '=(TEXT(LEFT(INDIRECT("B"&ROW()),10),"yyyy-mm-dd "))'
-            GOOGLE_VERSION_DICT = {
-                'vhmDCKNckjxeWkSsysrmdk': 'v1',
-                'vGzNDDcKCRUii3uYWX9eUD': 'v2',
-                'vjRG97FSWLWGffyzekiZfy': 'v3',
-                'vPKpE4cDvZFBCjW6qLj4XD': 'v4',
-                'vPCHmyu7wSmfEzkjtSwtp9': 'v5',
-                'veCAJ7XCQ6zwkjM2CUyh9b': 'v6',
-                'vM23DK5cLuj69eRoYBVtZn': 'v7',
-                'v2PeUCJPA4ybra67zSrzqG': 'v8',
-                'v2Y4EQ5UnfzduEhHLkpd5q': 'v9',
-                'vqLkQC2VUfE2Sju4daVLtj': 'v11',
-                'vUhbRnabqzoDfAG7k3Lxqu': 'v12',
-                'vByBFqUiFGNKN6xy3dVp2h': 'v13',
-                'v7W8eK3RQMQvhgW9zPHozv': 'v14',
-                'vgMEc8bjmok3NLwENyEjjX': 'v15',
-                'vbp3gzGpKqrQBxxD9aRTCC': 'v17',
-                'vf4jqJPWTasMrZRw5RZQ6H': 'v18',
-                'vCV48cTDPfGkc8LqAFZ8CR': 'v19',
-                'vnt9ehxAEEYr2adWCgVCd7': 'v20',
-                'v6vd8mSArfBwJkHvNr39H6': 'v21',
-                'vMri5MYvayCRfS6yrXGxhc': 'v22',
-                'vDqpxGYyF28VCgWJRimDTW': 'v1-i',
-                'vPzpWuwFFCobmzT6BxtBpi': 'v2-i',
-                'vwDorFQsYqPkrPqTpPSwA7': 'v3-i',
-                'vVbU7nhpFDTRrHdTWWhSzU': 'v23',
-                'vQBQZaxKXmjfrd6EUv2AyW': 'v24',
-                'vuwzFJtrbydb7He29syKB7': 'v25',
-                'vDRjcUWz5TfrmsHVETJaxL': 'v26',
-                'vYkEdFB2Y3PRzbPGxo7GxA': 'v27',
-                'v6kNJDKrrcEaxeBC6q4yyX': 'v4-i',
-                'vAtyPtYBTyGBjgCHtU6nnK': 'v28',
-                'v6TWK7RVicgPemLR6QzdQ4': 'v5-i',
-                'vx9VE7g4ZdkiPt9S5G8HgR': 'v29',
-                'vTLWtFpJETVBLGyY64y5iM': 'v6-i',
-                'vfAt6ncFCDobgnEmVE532p': 'v30',
-                'vHTNob6PmRp47CagSqrePt': 'v31',
-                'vZ3kcYASkiWzdZbUzq3Xf9': 'v2-dsm',
-                'vpKMUDvHe2BDri6MuqeL6s': 'v7-i',
-                'vm6oMVrEYvLm833Z3UmHWT': 'v3-twc2',
-                'vjqirEyxbRaEeSwaMWqwLL': 'v4-twc2',
-                'vcPgrbRYNhLvZD3wEQQkd3': 'v5-twc2',
-                'vjYKbRn8YkfoEi94DZDU97': 'v6-twc2',
-                'vJPAyGJKHGNXefNie8Nuaq': 'v7-twc2',
-                'vwcAGGT4juWtYrECiRf7XU': 'v8-twc2',
-                'vMjX3eAnsvNNFVEXLNTQZD': 'v32',
-                'vC9GgrbXQp6fVd2C4PGAt4': 'v3-dsm',
-                'vrJXmnGFxRLEp2CL4bMQqF': 'v8-i',
-                'vzpv5jeqgRpX6jDzBqxUVY': 'v33',
-                'vnxPqQeWqgDbMkEKPG6Qo6': 'v9-twc2',
-                'voYSHveEczpYBdWEJqKWvc': 'v4-dsm',
-                'veGqP9bqcGBwRyRbwthwvX': 'v9-i',
-                'viCb3faKAu4UQuiokmoQyZ': 'v10-i',
-                'v5eQCAnx6QNRvvrYX89whb': 'v10-twc2',
-                'vfsJCoq3dS4B5iHXHh4k4M': 'v5-dsm',
-                'vYWjoWYNYymVsZ46EF5rSU': 'v34',
-            }
-            GOOGLE_UNIQUEID_AFTER_GROUP = 'S60'
-            GOOGLE_UNIQUEID_AFTER_QUESTION = 'ID5'
-
-            GOOGLE_COLUMN_UNIQUEID = 'JZ'
-            GOOGLE_COLUMN_LATESTRESPONSE = 'KA'
-            GOOGLE_LATEST_RESPONSE_FORMULA = f'=if(INDIRECT({GOOGLE_COLUMN_LATESTRESPONSE}$1&ROW())="","",max(arrayformula(if({GOOGLE_COLUMN_UNIQUEID}:{GOOGLE_COLUMN_UNIQUEID}=INDIRECT({GOOGLE_COLUMN_LATESTRESPONSE}$1&ROW()),row({GOOGLE_COLUMN_UNIQUEID}:{GOOGLE_COLUMN_UNIQUEID})))))'
-
-            # Get list of existing UniqueIDs for later
-            uidlist = googlesheets.read_column(GOOGLE_SHEET_IDS['CLEANEDDATA'], 'Data (labeled)', GOOGLE_COLUMN_UNIQUEID, 4)
-            if debug:
-                print("List of UIDs:")
-                pprint.pprint(uidlist)
-
+        '''The Google Sheet ID show in the URL when you open a spreadsheet.
+        Format for google-sheet-ids.json:
+        {
+            "CLEANEDDATA": "1OQ-a9r17VW_y4AeISaLKutNLKBDRw2QePemfYsFrm4k",
+            "CONTACTS": "1pMETsSB08C40_y_dCVGGRIxAGhMb5N0TQ53EoOzN0gg",
+            "S70": "1zYWFfCYTLHicHxdd7AA2pIHcKbQUfRNMOl8Gk9GoINM"
+        }'''
+        with open(GOOGLE_SHEET_IDS_FILE_NAME, 'r') as google_sheet_ids_file:
+            GOOGLE_SHEET_IDS = json.load(google_sheet_ids_file)
 
         if add_headers:
             # Sheet is still empty -> fill the header rows first
             # Insert two new rows on top to preserve whatever may be in the sheet already
             debugMsg('Adding headers')
 
-            sorted_codes = [None, None, None, None, None, None]
-            sorted_labels = ['_submission_time', 'Submission date and time (computed)', 'Date (computed)', '_version_', 'Version (computed)', '_id']
-            contact_codes = [None, None, None, None, None]
-            contact_labels = ['_submission_time', 'Submission date and time (computed)', '_id', 'Unique ID (computed)', 'Interviewer']
-            for question in flat_questions:
-                if 'type' in question:
-                    # question is a question
-                    new_code = '/'.join([question['group_code'], question['code']])
-                else:
-                    # question is a choice
-                    new_code = '/'.join([question["group_code"], question['question_code'], question["code"]])
-                if 'label' in question:
-                    new_label = question['label']
-                else:
-                    new_label = question['code']
-                if not question['group_code'].startswith(GC_CONTACT):
-                    sorted_codes.append(new_code)
-                    sorted_labels.append(new_label)
-                else:
-                    contact_codes.append(new_code)
-                    contact_labels.append(new_label)
-                # Add the unique ID and row # of last response
-                if question['group_code'] == GOOGLE_UNIQUEID_AFTER_GROUP and question['code'] == GOOGLE_UNIQUEID_AFTER_QUESTION:
-                    sorted_codes.append('')
-                    sorted_labels.append('Unique ID (computed)')
-                    sorted_codes.append('')
-                    sorted_labels.append('Row # of latest response of respondent')
-            sorted_values = [
-                sorted_codes,
-                sorted_labels
-            ]
-            contact_values = [
-                contact_codes,
-                contact_labels
-            ]
+            sorted_values = tabularise.get_data_headers(flat_questions)
+            contact_values = tabularise.get_contact_headers(flat_questions)
             for sheet_range in ['Data (labeled)', 'Data (codes)']:
                 googlesheets.append_rows(GOOGLE_SHEET_IDS['CLEANEDDATA'], sheet_range, sorted_values)
             for sheet_range in ['Data (labeled)', 'Data (codes)']:
@@ -550,209 +177,42 @@ def main(argv):
             debugMsg(f'Labeling { new_submissions } submissions')
             # Concatenate the results from both versions and sort by submission time
             # Add the labels for questions and choices
-            labeled_results = []
-            for i in range(0, len(new_data)):
-                for result in new_data[i]['results']:
-                    labeled_results.append(kobo.label_result(unlabeled_result=result, choice_lists=choice_lists, questions=questions_list[i], unpack_multiples=True))
-            labeled_results = sorted(labeled_results, key=lambda result: result['meta']['_submission_time'])
+            labeled_results = kobo_import.get_labeled_result(new_data, choice_lists, questions, questions_list)
 
             # Unpack and upload results
             for sheet_range in ['Data (labeled)', 'Data (codes)']:
                 debugMsg(f'Uploading {new_submissions} submissions to {sheet_range}')
-                upload_values = []
-                contact_upload_values = []
-                for labeled_result in labeled_results:
-                    if '_version_' in labeled_result['meta'] and labeled_result['meta']['_version_'] in GOOGLE_VERSION_DICT:
-                        version = GOOGLE_VERSION_DICT[labeled_result['meta']['_version_']]
-                        version_ = labeled_result['meta']['_version_']
-                    elif '__version__' in labeled_result['meta'] and labeled_result['meta']['__version__'] in GOOGLE_VERSION_DICT:
-                        version = GOOGLE_VERSION_DICT[labeled_result['meta']['__version__']]
-                        version_ = labeled_result['meta']['__version__']
-                    else:
-                        version = 'NEW'
-                        version_ = 'N/A'
-                    result_values = [labeled_result['meta']['_submission_time'], GOOGLE_DATETIME_FORMULA, GOOGLE_DATE_FORMULA, version_, version, labeled_result['meta']['_id']]
-                    if '/'.join([GC_INTRO, QC_INTERVIEWER]) in labeled_result['results']:
-                        interviewer = labeled_result['results']['/'.join([GC_INTRO, QC_INTERVIEWER])]['answer_code']
-                    else:
-                        interviewer = ''
-                    contact_values = [labeled_result['meta']['_submission_time'], GOOGLE_DATETIME_FORMULA, labeled_result['meta']['_id'], getUniqueId(labeled_result), interviewer]
-                    for question in flat_questions:
-                        new_values = []
-                        if 'type' in question:
-                            # question is a question, not a choice
-                            results_code = '/'.join([question['group_code'], question['code']])
-                            if results_code in labeled_result['results']:
-                                if sheet_range == 'Data (labeled)':
-                                    new_values.append(labeled_result['results'][results_code]['answer_label'])
-                                else:
-                                    new_values.append(labeled_result['results'][results_code]['answer_code'])
-                            else:
-                                new_values.append('')
-                        else:
-                            # question is a choice
-                            results_code = '/'.join([question['group_code'], question['question_code']])
-                            if results_code in labeled_result['results'] and question['code'] in labeled_result['results'][results_code]['choices']:
-                                if sheet_range == 'Data (labeled)':
-                                    new_values.append(labeled_result['results'][results_code]['choices'][question['code']]['answer_label'])
-                                else:
-                                    new_values.append(labeled_result['results'][results_code]['choices'][question['code']]['answer_code'])
-
-
-                            else:
-                                new_values.append('')
-                        if not question['group_code'].startswith(GC_CONTACT):
-                            result_values += new_values
-                        else:
-                            contact_values += new_values
-                        # Add the unique ID and row # of last response
-                        if question['group_code'] == GOOGLE_UNIQUEID_AFTER_GROUP and question['code'] == GOOGLE_UNIQUEID_AFTER_QUESTION:
-                            result_values.append(getUniqueId(labeled_result))
-                            result_values.append(GOOGLE_LATEST_RESPONSE_FORMULA)
-                    upload_values.append(result_values)
-                    contact_upload_values.append(contact_values)
-
-                #print('!')
-                #print('.')
-                #print('!')
+                if sheet_range == 'Data (labeled)':
+                    value_type = 'labels'
+                else:
+                    value_type = 'codes'
+                upload_values = tabularise.get_data_values(labeled_results, flat_questions, value_type)
+                contact_upload_values = tabularise.get_contact_values(labeled_results, flat_questions, value_type)
 
                 googlesheets.append_rows(GOOGLE_SHEET_IDS['CLEANEDDATA'], sheet_range, upload_values)
                 googlesheets.append_rows(GOOGLE_SHEET_IDS['S70'], sheet_range, contact_upload_values)
 
             # Update partner list
-            upload_values = []
-            for labeled_result in labeled_results:
-                if '/'.join([GC_CONTACT, QC_PARTNER]) in labeled_result['results'] and labeled_result['results']['/'.join([GC_CONTACT, QC_PARTNER])]['answer_code'] == '01':
-                    debugMsg('Found new partner!')
-                    # Person wants to partner -> add to the partner list
-                    upload_row = [None] * (columnToIndex('K') + 1) # Data list for columns A to K
-
-                    timestring = labeled_result['meta']['_submission_time']
-                    timeobj = datetime.fromisoformat(timestring)
-                    upload_row[columnToIndex('A')] = (timeobj + timedelta(hours=8)).date().isoformat()
-
-                    upload_row[columnToIndex('B')] = getUniqueId(labeled_result)
-
-                    upload_row[columnToIndex('C')] = labeled_result['results']['/'.join([GC_CONTACT, QC_PARTNER])]['answer_label']
-
-                    sheet_columns = [
-                        (GC_CONTACT, QC_ORGNAME),
-                        (GC_CONTACT, QC_EMAIL),
-                        (GC_CONTACT, QC_WHATSAPP),
-                        (GC_CONTACT, QC_TELEGRAM),
-                        (GC_CONTACT, QC_FACEBOOK),
-                        (GC_CONTACT, QC_VIBER),
-                        (GC_CONTACT, QC_SMS),
-                        (GC_CONTACT, QC_CONTACT_OTHER),
-                    ]
-                    column_index = columnToIndex('D')
-                    for group, question in sheet_columns:
-                        try:
-                            upload_row[column_index] = labeled_result['results']['/'.join([group, question])]['answer_label']
-                        except KeyError as err:
-                            debugMsg(f'KeyError in partner sheet, question {question}:', err)
-                        column_index += 1
-
-                    upload_values.append(upload_row)
-
+            upload_values = tabularise.get_partner_values(labeled_results)
             if upload_values:
                 googlesheets.append_rows(GOOGLE_SHEET_IDS['CONTACTS'], 'Interested partners', upload_values)
+            
+            # Send copy of responses
+            copyofresponses.handle_copies(labeled_results, questions, flat_questions)
 
-            #print('-')
-            #print('/')
-            #print('|')
-
-            upload_values = []
-            for labeled_result in labeled_results:
-                # Send copy of responses
-                if '/'.join([GC_CONTACT, QC_COPY]) in labeled_result['results'] and labeled_result['results']['/'.join([GC_CONTACT, QC_COPY])]['answer_code'] == '01':
-                    debugMsg('Copy requested!')
-                    if '/'.join([GC_CONTACT, QC_EMAIL]) in labeled_result['results']:
-                        # Send email automatically
-                        sender_email = 'covidsgsurvey@washinseasia.org'
-                        receiver_email = labeled_result['results']['/'.join([GC_CONTACT, QC_EMAIL])]['answer_label']
-                        subject = "Your responses - Survey on COVID-19 behaviours in Singapore"
-
-                        codes_constants = {
-                            'GC_CONTACT': 'S70',
-                            'QC_AGAIN': 'again'
-                        } # TODO: This dict is only temporary while refactoring
-                        html = copyofresponses.get_html(labeled_result, questions, flat_questions, codes_constants)
-                        txt = copyofresponses.get_txt(labeled_result, questions, flat_questions, codes_constants)
-
-                        debugMsg(f'Sending mail to { receiver_email }')
-
-                        with open('smtp-credentials.json', 'r') as smtp_credentials_file:
-                            smtp_credentials = json.load(smtp_credentials_file)
-                        server = 'smtp.emaillabs.net.pl'
-                        port = 465
-                        smtp_conn = sendmail.connect_smtp(server, port, sendmail.ENCRYPTION_TLS, smtp_credentials['user'], smtp_credentials['password'])
-                        recipients = sendmail.send_email(smtp_conn, sender_email, receiver_email, subject, txt, html)
-                        if recipients is not None and len(recipients) > 0:
-                            debugMsg('Mail sent!')
-                        sendmail.disconnect_smtp(smtp_conn)
-                    else:
-                        # no email address -> create PDF and add respondent to the list of copies to be sent
-                        debugMsg('Copy requested, but no email given!')
-                        codes_constants = {
-                            'GC_CONTACT': 'S70',
-                            'QC_AGAIN': 'again'
-                        } # TODO: This dict is only temporary while refactoring
-                        pdfhtml = copyofresponses.get_pdfhtml(labeled_result, questions, flat_questions, codes_constants)
-                        fh = pdfcopy.create_pdf(pdfhtml)
-                        filename = f'{ getUniqueId(labeled_result) }.pdf'
-                        drive_file = googledrive.upload_file(filename, fh)
-                        debugMsg(f'File ID on Google Drive: { drive_file.get("id") }')
-
-                #print('\\')
-                #print('-')
-                #print('/')
-
-                ######## LIST OF REPEATS ########
-                if [getUniqueId(labeled_result)] in uidlist or ('/'.join([GC_INTRO, QC_BEFORE]) in labeled_result['results'] and labeled_result['results']['/'.join([GC_INTRO, QC_BEFORE])]['answer_code'] == '01') or ('/'.join([GC_CONTACT, QC_AGAIN]) in labeled_result['results'] and labeled_result['results']['/'.join([GC_CONTACT, QC_AGAIN])]['answer_code'] != '00'):
-                    # Respondent has answered before, claims to have answered before or wants to do the survey again
-                    debugMsg('Found (potential) repeat respondent!')
-                    # Add to repeat respondent list
-                    upload_row = [None] * (columnToIndex('N') + 1) # Data list for columns A to N
-
-                    timestring = labeled_result['meta']['_submission_time']
-                    timeobj = datetime.fromisoformat(timestring)
-                    day_of_submission = (timeobj + timedelta(hours=8)).date()
-                    upload_row[columnToIndex('A')] = day_of_submission.isoformat()
-
-                    upload_row[columnToIndex('B')] = getUniqueId(labeled_result)
-
-                    sheet_columns = [
-                        (GC_INTRO, QC_BEFORE),
-                        (GC_CONTACT, QC_AGAIN),
-                        (GC_CONTACT, QC_REMIND),
-                        (GC_INTRO, QC_INTERVIEWER),
-                        (GC_CONTACT, QC_EMAIL),
-                        (GC_CONTACT, QC_WHATSAPP),
-                        (GC_CONTACT, QC_TELEGRAM),
-                        (GC_CONTACT, QC_FACEBOOK),
-                        (GC_CONTACT, QC_VIBER),
-                        (GC_CONTACT, QC_SMS),
-                        (GC_CONTACT, QC_CONTACT_OTHER),
-                        (GC_ABOUT, QC_NATIONALITY),
-                    ]
-                    column_index = columnToIndex('C')
-                    for group, question in sheet_columns:
-                        try:
-                            upload_row[column_index] = labeled_result['results']['/'.join([group, question])]['answer_label']
-                        except KeyError as err:
-                            debugMsg(f'KeyError in repeats sheet, question {question}: ' + str(err))
-                        column_index += 1
-
-                    googlesheets.append_rows(GOOGLE_SHEET_IDS['CONTACTS'], 'List of repeats', [upload_row])
+            # Fill the list of repeats
+            # Get list of existing UniqueIDs
+            uidlist = googlesheets.read_column(GOOGLE_SHEET_IDS['CLEANEDDATA'], 'Data (labeled)', COLUMNS['unique_id'], 4)
+            if debug:
+                print("List of UIDs:")
+                pprint.pprint(uidlist)
+            upload_values = tabularise.get_repeat_values(labeled_results, uidlist)
+            if upload_values:
+                googlesheets.append_rows(GOOGLE_SHEET_IDS['CONTACTS'], 'List of repeats', upload_values)
 
             rowCount = sqlitedb.exec_sql(conn, f"UPDATE lastrun SET lastsubmit = '{ labeled_results[-1]['meta']['_submission_time'] }'")
             sqlitedb.disconnect_db(conn)
 
-            #print('3')
-            #print('2')
-            #print('1')
-            pass
     except Exception as e:
         print("Error: Exception caught, error: %s" % str(e))
         # something went wrong -> disable the tool by creating a file named 'inhibit'
