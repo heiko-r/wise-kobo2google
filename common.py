@@ -96,6 +96,10 @@ VERSIONS = {
     'v5eQCAnx6QNRvvrYX89whb': 'v10-twc2',
     'vfsJCoq3dS4B5iHXHh4k4M': 'v5-dsm',
     'vYWjoWYNYymVsZ46EF5rSU': 'v34',
+    'v7VzwKu2WZ7j9vEdTE6PoK': 'v6-dsm',
+    'v3nJYwed3rK2tUydZyavQk': 'v36',
+    'vGcHHKCPxRvbXXmTsyZVy9': 'v11-twc2',
+    'vtBqADcuAAXVZsUg6FDm53': 'v11-i',
 }
 
 COLUMNS = {
