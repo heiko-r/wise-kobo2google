@@ -1,25 +1,18 @@
 # Make sure that the locale 'en_SG.UTF-8' is installed!
 
-import os
-import sys
 import time
 import json
 import pprint
-import requests
 
 import sqlitedb
 import copyofresponses
 import googlesheets
 import kobo_import
 import tabularise
-from common import getUniqueId, COLUMNS
+from common import *
 
 # Global Constants
 KOBO_CREDENTIAL_FILE_NAME = 'kobo-credentials.json'
-GOOGLE_SHEET_IDS_FILE_NAME = 'test-google-sheet-ids.json' # TODO: Change this back before deploying
-GOOGLE_TOKENS_FILE_NAME = 'google_tokens.json'
-MAIL_TEMPLATE_STYLES_FILE_NAME = 'mailtemplate-styles.json'
-SMTP_CREDENTIALS_FILE_NAME = 'smtp-credentials.json'
 INHIBIT_FILE_NAME = 'inhibit'
 
 # Global variables
@@ -27,59 +20,26 @@ debug = False
 add_headers = False
 
 
-# Return True if connected to internet, False otherwise.
-def isConnectedToInternet(timeout=5):
-    url='http://www.google.com/'
+'''
+Returns required configuration file name list.
+'''
+def getConfigFileList():
+    return [KOBO_CREDENTIAL_FILE_NAME,
+            GOOGLE_SHEET_IDS_FILE_NAME,
+            GOOGLE_TOKENS_FILE_NAME,
+            MAIL_TEMPLATE_STYLES_FILE_NAME,
+            SMTP_CREDENTIALS_FILE_NAME]
 
-    try:
-        requests.get(url, timeout=timeout)
-    except requests.ConnectionError:
-        return False
-
-    return True
-
-# Checks all required configuration files presence.
-def checkAllConfigFiles():
-    configFileList = [KOBO_CREDENTIAL_FILE_NAME,
-                      GOOGLE_SHEET_IDS_FILE_NAME,
-                      GOOGLE_TOKENS_FILE_NAME,
-                      MAIL_TEMPLATE_STYLES_FILE_NAME,
-                      SMTP_CREDENTIALS_FILE_NAME]
-
-    debugMsg(f'Current path: { os.getcwd() }')
-
-    for configFile in configFileList:
-        if not os.path.exists(configFile):
-            printMsgAndQuit('Error: %s file is missing' % configFile)
-
-# Perform environment checks to ensure all required settings are present.
-def checkEnvironment():
+'''
+Perform environment checks to ensure all required settings are present.
+'''
+def _checkEnvironment():
     # Check for inhibit file for any errors in last run.
     if os.path.isfile(INHIBIT_FILE_NAME):
         printMsgAndQuit("Error: Tool is disabled due to error in last run")
 
-    # Check all required configuration files present.
-    checkAllConfigFiles()
-
-    # Check internet connection.
-    if not isConnectedToInternet():
-        printMsgAndQuit("Error: No internet connection.")
-
-# Prints debug verbose message.
-def debugMsg(message):
-    if debug:
-        print(message)
-
-# Quit program with error code.
-def quitApp(errorCode=-1):
-    sys.exit(errorCode)
-
-# Print message and quit.
-def printMsgAndQuit(message, errorCode=-1):
-    print("")
-    print(message)
-    sys.stdout.flush()
-    quitApp(errorCode)
+    # Check all required configuration files present and connected to internet.
+    checkEnvironment(getConfigFileList(), isInternetCheckRequired=True)
 
 ################################################################################
 
@@ -88,7 +48,7 @@ Main function
 '''
 def main(argv):
     # Check environment
-    checkEnvironment()
+    _checkEnvironment()
 
     # Connect with SQLite database
     conn = sqlitedb.connect_db('kobo.db')
@@ -110,7 +70,7 @@ def main(argv):
         }'''
         with open(KOBO_CREDENTIAL_FILE_NAME, 'r') as kobo_credentials_file:
             KOBO_TOKEN = json.load(kobo_credentials_file)['token']
-        
+
         kobo_import.init_kobo(KOBO_TOKEN)
 
         asset_uids = [
@@ -195,7 +155,7 @@ def main(argv):
             upload_values = tabularise.get_partner_values(labeled_results)
             if upload_values:
                 googlesheets.append_rows(GOOGLE_SHEET_IDS['CONTACTS'], 'Interested partners', upload_values)
-            
+
             # Send copy of responses
             copyofresponses.handle_copies(labeled_results, questions, flat_questions)
 

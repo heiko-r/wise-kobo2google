@@ -1,9 +1,16 @@
 # Python file containing group and question codes used throughout the scripts.
 
+import os
+import requests
 import sys
 
-# Enable for verbose debug logging (disabled by default)
-g_EnableDebugMsg = False
+from settings import *
+
+# Global Constants
+GOOGLE_SHEET_IDS_FILE_NAME = 'test-google-sheet-ids.json' # TODO: Change this back before deploying
+GOOGLE_TOKENS_FILE_NAME = 'google_tokens.json'
+MAIL_TEMPLATE_STYLES_FILE_NAME = 'mailtemplate-styles.json'
+SMTP_CREDENTIALS_FILE_NAME = 'smtp-credentials.json'
 
 GROUP_CODES = {
     'intro': 'S10',
@@ -140,14 +147,49 @@ def getUniqueId(labeled_result):
 
 
 '''
+Function to check internet connection.
+Return True if connected to internet, False otherwise.
+'''
+def isConnectedToInternet(url='http://www.google.com/', timeout=5):
+    try:
+        requests.get(url, timeout=timeout)
+    except requests.ConnectionError:
+        return False
+
+    return True
+
+'''
+Checks file presence for input file name list.
+Return True if all files exists, False otherwise.
+'''
+def isFileExists(fileNameList):
+    for fileName in fileNameList:
+        if not os.path.exists(fileName):
+            return False
+
+    return True
+
+'''
+Perform environment checks to ensure all required settings are present.
+'''
+def checkEnvironment(requiredFileNameList=[], isInternetCheckRequired=False):
+    # Check all required files present.
+    if not isFileExists(requiredFileNameList):
+        printMsgAndQuit("Error: Required file doesn't exists!")
+
+    # Check internet connection.
+    if isInternetCheckRequired and not isConnectedToInternet():
+        printMsgAndQuit("Error: No internet connection.")
+
+'''
 Prints debug verbose message.
 '''
-def debugMsg(message, err = None):
+def debugMsg(message, err=None):
     if g_EnableDebugMsg:
-        if err is None:
-            print(message)
+        if err:
+            print(message + " (error:%s)" % str(err))
         else:
-            print(message + " " + str(err))
+            print(message)
 
 '''
 Print message and quit.
@@ -156,4 +198,10 @@ def printMsgAndQuit(message, errorCode=-1):
     print("")
     print(message)
     sys.stdout.flush()
+    sys.exit(errorCode)
+
+'''
+Quit program with error code.
+'''
+def quitApp(errorCode=-1):
     sys.exit(errorCode)
