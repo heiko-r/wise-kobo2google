@@ -97,9 +97,12 @@ VERSIONS = {
     'vfsJCoq3dS4B5iHXHh4k4M': 'v5-dsm',
     'vYWjoWYNYymVsZ46EF5rSU': 'v34',
     'v7VzwKu2WZ7j9vEdTE6PoK': 'v6-dsm',
-    'v3nJYwed3rK2tUydZyavQk': 'v36',
+    'v3nJYwed3rK2tUydZyavQk': 'v35',
     'vGcHHKCPxRvbXXmTsyZVy9': 'v11-twc2',
     'vtBqADcuAAXVZsUg6FDm53': 'v11-i',
+    'vAU5aZtEiGxGwr8q5dEmhW': 'v12-i',
+    'vEP375D6umfmsv2oQtWmL7': 'v12-twc2',
+    'vWP2hvkdP9ZqjpwZpror5K': 'v36',
 }
 
 COLUMNS = {
