@@ -17,7 +17,7 @@ def init_sheets_api():
 
     if sheets_api is None:
         debug_msg('Initialising Google Sheets API')
-        
+
         # Load credentials
         with open('google_tokens.json', 'r') as tokenfile:
             google_tokens = json.load(tokenfile)
@@ -28,10 +28,10 @@ def init_sheets_api():
             client_id=google_tokens['client_id'],
             client_secret=google_tokens['client_secret']
         )
-        
+
         # Create the Google Sheets API
         sheets_service = build('sheets', 'v4', credentials=creds)
-        
+
         # Call the Sheets API
         sheets_api = sheets_service.spreadsheets()
 
@@ -55,7 +55,6 @@ def append_rows(document_id, sheet_name, rows):
         insertDataOption='INSERT_ROWS',
         body=request_body)
     return request.execute()
-    
 
 '''
 Function to read a column from a Google Sheet.
@@ -72,6 +71,24 @@ def read_column(document_id, sheet_name, column_code, offset):
         range=sheet_range).execute()
     return result.get('values', [])
 
+'''
+Function to read cells from a Google Sheet.
+document_id: ID of the spreadsheet document as in the URL
+sheet_name: Name of the sheet as in the tabs
+start_column_code: Start column to read (like 'A')
+start_column_offset: Which row to start from (like 3)
+end_column_code: End column to read (like 'B')
+end_column_offset: Which row to end (like 5)
+'''
+def read_cells(document_id, sheet_name, start_column_code, start_column_offset, end_column_code, end_column_offset=None):
+    init_sheets_api()
+    sheet_range = f'{sheet_name}!{start_column_code}{start_column_offset}:{end_column_code}'
+    if end_column_offset:
+        sheet_range += f'{end_column_offset}'
+    result = sheets_api.values().get(
+        spreadsheetId=document_id,
+        range=sheet_range).execute()
+    return result.get('values', [])
 
 '''
 Prints verbose debug message.
