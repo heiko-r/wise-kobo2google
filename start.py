@@ -66,7 +66,7 @@ def main(argv):
         '''Get the token from https://kf.kobotoolbox.org/token/
         Format for kobo-credentials.json:
         {
-            "token": "0b3bc87dbaa7ef82ad00411e791537581c409e48"
+            "token": <token>
         }'''
         with open(KOBO_CREDENTIAL_FILE_NAME, 'r') as kobo_credentials_file:
             KOBO_TOKEN = json.load(kobo_credentials_file)['token']
@@ -112,9 +112,9 @@ def main(argv):
         '''The Google Sheet ID show in the URL when you open a spreadsheet.
         Format for google-sheet-ids.json:
         {
-            "CLEANEDDATA": "1OQ-a9r17VW_y4AeISaLKutNLKBDRw2QePemfYsFrm4k",
-            "CONTACTS": "1pMETsSB08C40_y_dCVGGRIxAGhMb5N0TQ53EoOzN0gg",
-            "S70": "1zYWFfCYTLHicHxdd7AA2pIHcKbQUfRNMOl8Gk9GoINM"
+            "CLEANEDDATA": <sheet_id>,
+            "CONTACTS": <sheet_id>,
+            "S70": <sheet_id>
         }'''
         with open(GOOGLE_SHEET_IDS_FILE_NAME, 'r') as google_sheet_ids_file:
             GOOGLE_SHEET_IDS = json.load(google_sheet_ids_file)
