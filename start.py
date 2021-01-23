@@ -116,7 +116,6 @@ def main(argv):
         asset_uids = [
             'argHw9ZzcAtcmEytJbWQo7', # online version
             'aAYAW5qZHEcroKwvEq8pRb', # interview version
-            'aKAexXkCDUM5WbL3jQW2V5', # DSM version
             'aXbWBpzEm8xZyatgciGnEd', # TWC2 version
         ]
 
