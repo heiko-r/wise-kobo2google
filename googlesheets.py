@@ -91,6 +91,32 @@ def read_cells(document_id, sheet_name, start_column_code, start_column_offset, 
     return result.get('values', [])
 
 '''
+Function to update cell value to a Google Sheet.
+document_id: ID of the spreadsheet document as in the URL
+sheet_name: Name of the sheet as in the tabs
+column_code: column to update (like 'A')
+row_offset: offset to update (like 5)
+value: Value to be updated (like 'Completed)
+'''
+def update_cell(document_id, sheet_name, column_code, row_offset, value):
+    init_sheets_api()
+
+    values = [[value]]
+    request_body = {
+        "majorDimension": 'ROWS',
+        'values': values
+    }
+
+    sheet_range = f'{sheet_name}!{column_code}{row_offset}:{column_code}{row_offset}'
+    request = sheets_api.values().update(
+        spreadsheetId=document_id,
+        range=sheet_range,
+        valueInputOption='USER_ENTERED',
+        body=request_body)
+
+    return request.execute()
+
+'''
 Prints verbose debug message.
 '''
 def debug_msg(msg):
