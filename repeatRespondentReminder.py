@@ -25,6 +25,9 @@ XLS_SHEET_END_COLUMN_CODE = 'S'
 # XLS sheet Status column data values to check
 STATUS_CHECK_LIST = ['Send reminder', 'To submit today']
 
+# Email content templates
+MAIL_TEMPLATE_TXT_FILE_NAME = 'remindertemplate.txt'
+MAIL_TEMPLATE_HTML_FILE_NAME = 'remindertemplate.html'
 
 '''
 Returns required configuration file name list.
@@ -48,15 +51,16 @@ def sendReminderEmail(record):
     try:
         sender_email = 'covidsgsurvey@washinseasia.org'
         receiver_email = record[EMAIL_COLUMN_INDEX]
-        subject = "Reminder email - Survey on COVID-19 behaviours in Singapore"
+        subject = "👋 WISE COVID-19 SG Survey Reminder"
 
         debugMsg("\tSending reminder email to: %s" % receiver_email)
 
-        # @todo: update below code
-        #html = get_html(labeled_result, questions, flat_questions)
-        #txt = get_txt(labeled_result, questions, flat_questions)
-        html = "Sample html"
-        txt = "sample text"
+        # Read the TXT and HTML content from files
+        # No templating needed
+        with open(MAIL_TEMPLATE_HTML_FILE_NAME, 'r') as mail_template_html_file:
+            html = mail_template_html_file.read()
+        with open(MAIL_TEMPLATE_TXT_FILE_NAME, 'r') as mail_template_txt_file:
+            txt = mail_template_txt_file.read()
 
         with open(SMTP_CREDENTIALS_FILE_NAME, 'r') as smtp_credentials_file:
             smtp_credentials = json.load(smtp_credentials_file)
