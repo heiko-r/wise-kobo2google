@@ -118,7 +118,7 @@ def isReminderSendAllowed(record, index):
             return False # skip this record
 
         numDaysDiff = numDaysDifference(datetime.now(), firstRemiderSendDateTime)
-        if numDaysDiff and (numDaysDiff > 4):
+        if numDaysDiff and (numDaysDiff > SECOND_REMINDER_EMAIL_DAY_DIFFERENCE):
             return True
 
     return False
@@ -227,7 +227,7 @@ def main(argv):
         googleSheetId = GOOGLE_SHEET_IDS[XLS_DOCUMENT_NAME]
 
         # Fetch records
-        records = fetchRecords(googleSheetId);
+        records = fetchRecords(googleSheetId)
 
         recordCount = len(records)
         print("Total Records: %d" % recordCount)
@@ -255,8 +255,6 @@ def main(argv):
             # Send reminder email and update rocord
             if sendReminderEmail(record) and updateRecord(googleSheetId, record, index):
                 reminderSendSuccessCount += 1
-
-            break
 
         # Print stats
         debugMsg("")
