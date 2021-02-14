@@ -133,12 +133,12 @@ def getUniqueId(labeled_result):
     global GROUP_CODES, QUESTION_CODES
     debugMsg('Trying to extract ID')
     try:
-        id1 = str(labeled_result['results']['/'.join([GROUP_CODES['id'], QUESTION_CODES['ID1']])]['answer_code']).upper()
-        id2 = "{0:0=2d}".format(int(labeled_result['results']['/'.join([GROUP_CODES['id'], QUESTION_CODES['ID2']])]['answer_code']))
-        id3 = str(labeled_result['results']['/'.join([GROUP_CODES['id'], QUESTION_CODES['ID3']])]['answer_code'])
-        id4 = str(labeled_result['results']['/'.join([GROUP_CODES['id'], QUESTION_CODES['ID4']])]['answer_code'])
-        if '/'.join([GROUP_CODES['id'], QUESTION_CODES['ID5']]) in labeled_result['results']:
-            id5 = str(labeled_result['results']['/'.join([GROUP_CODES['id'], QUESTION_CODES['ID5']])]['answer_code'])
+        id1 = str(labeled_result['results']['/'.join([GROUP_CODES['id'], QUESTION_CODES['id1']])]['answer_code']).upper()
+        id2 = "{0:0=2d}".format(int(labeled_result['results']['/'.join([GROUP_CODES['id'], QUESTION_CODES['id2']])]['answer_code']))
+        id3 = str(labeled_result['results']['/'.join([GROUP_CODES['id'], QUESTION_CODES['id3']])]['answer_code'])
+        id4 = str(labeled_result['results']['/'.join([GROUP_CODES['id'], QUESTION_CODES['id4']])]['answer_code'])
+        if '/'.join([GROUP_CODES['id'], QUESTION_CODES['id5']]) in labeled_result['results']:
+            id5 = str(labeled_result['results']['/'.join([GROUP_CODES['id'], QUESTION_CODES['id5']])]['answer_code'])
         else:
             id5 = str(labeled_result['results']['/'.join([GROUP_CODES['about'], QUESTION_CODES['age']])]['answer_code'][-1])
         debugMsg(f'ID: { id1 + id2 + id3 + id4 + id5 }')

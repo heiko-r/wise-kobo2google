@@ -81,7 +81,7 @@ def main(argv):
 
         debugMsg('Kobo: Checking for new data')
         # Get new submissions since last handled submission time
-        new_data = kobo_import.get_asset_data(asset_uids)
+        new_data = kobo_import.get_asset_data(asset_uids, last_submit_time)
         new_submissions = kobo_import.count_submissions(new_data)
 
         if not (new_submissions > 0 or add_headers):

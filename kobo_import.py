@@ -46,16 +46,15 @@ def move_question(asset_data, from_code, to_code):
     return asset_data
 
 
-def get_asset_data(asset_uids):
+def get_asset_data(asset_uids, last_submit_time):
     global kobo
     if kobo is None:
         printMsgAndQuit("Error in get_asset_data: KoboExtractor not initialised.")
     
     new_data = []
     for asset_uid in asset_uids:
-        # TODO: Change back to this original line before deploying:
-        #asset_data = kobo.get_data(asset_uid, submitted_after=last_submit_time)
-        asset_data = kobo.get_data(asset_uid, query='{"_id":80353595}') # Get one of Heiko's responses for v34
+        asset_data = kobo.get_data(asset_uid, submitted_after=last_submit_time)
+        #asset_data = kobo.get_data(asset_uid, query='{"_id":80353595}') # Get one of Heiko's responses for v34
         if asset_uid == 'aAYAW5qZHEcroKwvEq8pRb':
             # Special treatment to re-arrange the interview version
             asset_data = move_question(asset_data, 'S40/residence', 'S10/residence')
