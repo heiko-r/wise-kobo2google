@@ -191,8 +191,7 @@ def sendEmailForRecordsMarkedManualReview(manualReviewUniqueIdList):
     result = True
 
     sender_email = 'covidsgsurvey@washinseasia.org'
-    #receiver_email = 'heiko@rothkranz.net'
-    receiver_email = 'ragrawal.raipur@gmail.com'
+    receiver_email = 'heiko@rothkranz.net'
     subject = "WISE COVID-19 SG Survey Manual Review Required"
 
     debugMsg("\tSending Manual Review Required email to: %s" % receiver_email)
