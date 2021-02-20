@@ -1,5 +1,6 @@
 # Make sure that the locale 'en_SG.UTF-8' is installed!
 
+from datetime import datetime, timedelta
 import time
 import json
 import pprint
@@ -10,6 +11,7 @@ import googlesheets
 import kobo_import
 import tabularise
 from common import *
+import sendmail
 
 # Global Constants
 KOBO_CREDENTIAL_FILE_NAME = 'kobo-credentials.json'
@@ -19,6 +21,11 @@ INHIBIT_FILE_NAME = 'inhibit'
 debug = False
 add_headers = False
 
+# 'List of Repeats' XLS sheet
+REPEATS_XLS_SHEET_NAME = 'List of repeats'
+REPEATS_XLS_SHEET_START_COLUMN_CODE = 'A'
+REPEATS_XLS_SHEET_START_COLUMN_OFFSET = 3
+REPEATS_XLS_SHEET_STATUS_COLUMN_CODE = 'Q'
 
 '''
 Returns required configuration file name list.
@@ -40,6 +47,243 @@ def _checkEnvironment():
 
     # Check all required configuration files present and connected to internet.
     checkEnvironment(getConfigFileList(), isInternetCheckRequired=True)
+
+'''
+Returns valid datetime object from the input date string.
+'''
+def getValidSubmittedDate(dateStr):
+    if not dateStr:
+        print("\tWarning: Input date string is empty while performing getValidSubmittedDate() !")
+        return None
+
+    # Possible date formats
+    dateFormatList = ["%d %b %y", "%Y-%m-%d"]
+
+    # Check for valid date string pattern in the text
+    for dateFormat in dateFormatList:
+        try:
+            return datetime.strptime(dateStr, dateFormat)
+        except ValueError:
+            pass # ignore exception
+
+    return None
+
+'''
+Returns number of days difference in input datetime objects.
+'''
+def numDaysDifference(dateTime1, dateTime2):
+    if not dateTime1 or not dateTime2:
+        print("\tWarning: Input args are None while performing numDaysDifference() !")
+        return None
+
+    try:
+        return (dateTime1 - dateTime2).days
+    except Exception as e:
+        print("\tError: Exception caught while performing numDaysDifference(), error: %s" % str(e))
+        return None
+
+'''
+Fetch all 'List of repeats' sheet records from google sheet.
+'''
+def fetchAllListOfRepeatsRecords(googleSheetId):
+    try:
+        records = googlesheets.read_cells(googleSheetId,
+                                          REPEATS_XLS_SHEET_NAME,
+                                          REPEATS_XLS_SHEET_START_COLUMN_CODE, REPEATS_XLS_SHEET_START_COLUMN_OFFSET,
+                                          REPEATS_XLS_SHEET_STATUS_COLUMN_CODE)
+
+    except Exception as e:
+        print("\tError: Exception caught while reading 'List of repeats' records, error: %s" % str(e))
+        return None
+
+    return records
+
+'''
+Find latest repeat record for the input uniqueId.
+Returns record,index tupple.
+'''
+def findLatestRepeatRecordForUniqueId(uniqueId, repeatRecords):
+    if not uniqueId:
+        return None, None
+
+    # Search in reverve order
+    lastIndex = len(repeatRecords) - 1
+    for index in range(lastIndex, 0, -1):
+        record = repeatRecords[index]
+        if record and (len(record) > 2) and (record[1] == uniqueId):
+            return record, (index + REPEATS_XLS_SHEET_START_COLUMN_OFFSET)
+
+    return None, None
+
+'''
+Checks if input records have matching contact info.
+'''
+def isMatchingContactInfo(record1, record2):
+    if (not record1 or (len(record1) < 14)) or (not record2 or (len(record2) < 14)):
+        print("\tWarning: Bad Input objects while performing isMatchingContactInfo() !")
+        return False
+
+    isEmptyContactInfo = True # all contact info is empty
+    isAtleastOneContactInfoMatching = False # atleast one contact info matches
+
+    startContactIndex = 6 # Email
+    endContactIndex = 13 # Nationality
+
+    for index in range(startContactIndex, endContactIndex):
+        isEmptyContactInfo = isEmptyContactInfo and (record1[index] == '') and (record2[index] == '')
+        isAtleastOneContactInfoMatching = isAtleastOneContactInfoMatching or (not isEmptyContactInfo and (record1[index] == record2[index]))
+        if isAtleastOneContactInfoMatching:
+            return True
+
+    return isEmptyContactInfo
+
+'''
+Checks if submission date matches between new and old record.
+'''
+def isSubmissionDataMatches(newRecord, oldRecord):
+    if (not newRecord or (len(newRecord) < 1)) or (not oldRecord or (len(oldRecord) < 16)):
+        print("\tWarning: Bad Input objects while performing isSubmissionDataMatches() !")
+        return False
+
+    newRecDateSubmittedStr = newRecord[0] # Date Submitted
+    oldRecNextSubmissionStr = oldRecord[15] # Date of Next Submission
+
+    newRecDateSubmittedDate = getValidSubmittedDate(newRecDateSubmittedStr)
+    if not newRecDateSubmittedDate:
+        return False
+
+    oldRecNextSubmissionDate = getValidSubmittedDate(oldRecNextSubmissionStr)
+    if not oldRecNextSubmissionDate:
+        return False
+
+    # Date difference should be in the range (7 -> 30) days
+    numDaysDiff = numDaysDifference(newRecDateSubmittedDate, oldRecNextSubmissionDate)
+    if (numDaysDiff != None) and (numDaysDiff >= 7) and (numDaysDiff <= 30):
+        return True
+
+    return False
+
+'''
+Update status of the repeat record for the input record index.
+'''
+def updateRepeatRecordStatus(googleSheetId, recordIndex, status):
+    if not googleSheetId or (recordIndex < 0) or not status:
+        print("\tWarning: Bad Input args while performing updateRepeatRecordStatus() !")
+        return False
+
+    try:
+        return googlesheets.update_cell(googleSheetId,
+                                        REPEATS_XLS_SHEET_NAME,
+                                        REPEATS_XLS_SHEET_STATUS_COLUMN_CODE, recordIndex,
+                                        status)
+    except Exception as e:
+        print("\tError: Exception caught while updating status for older repeat record (recordIndex:%d) (status:%s), error: %s" % (recordIndex, status, str(e)))
+
+    return False
+
+'''
+Sends email with list of UniqueId which are identified for Manual Review.
+'''
+def sendEmailForRecordsMarkedManualReview(manualReviewUniqueIdList):
+    if not manualReviewUniqueIdList or len(manualReviewUniqueIdList) == 0:
+        return False
+
+    result = True
+
+    sender_email = 'covidsgsurvey@washinseasia.org'
+    #receiver_email = 'heiko@rothkranz.net'
+    receiver_email = 'ragrawal.raipur@gmail.com'
+    subject = "WISE COVID-19 SG Survey Manual Review Required"
+
+    debugMsg("\tSending Manual Review Required email to: %s" % receiver_email)
+
+    html = "<html><body><b>Manual review required for UniqueId:</b><ol>"
+    for uniqueId in manualReviewUniqueIdList:
+        html += "<li>" + uniqueId + "</li>"
+    html += "</ol></body></html>"
+    txt = ''
+
+    try:
+        with open(SMTP_CREDENTIALS_FILE_NAME, 'r') as smtp_credentials_file:
+            smtp_credentials = json.load(smtp_credentials_file)
+
+        server = 'smtp.emaillabs.net.pl'
+        port = 465
+        smtp_conn = sendmail.connect_smtp(server, port, sendmail.ENCRYPTION_TLS, smtp_credentials['user'], smtp_credentials['password'])
+        recipients = sendmail.send_email(smtp_conn, sender_email, receiver_email, subject, txt, html)
+
+        if recipients is not None:
+            debugMsg("\tSuccessfully send email to: %s" % receiver_email)
+        else:
+            print("\tError: Failed to send email to: %s" % receiver_email)
+            result = False
+
+        sendmail.disconnect_smtp(smtp_conn)
+
+    except Exception as e:
+        print("\tError: Exception caught while sending email, error: %s" % str(e))
+        return False
+
+    return result
+
+'''
+Update 'List of repeats' records status based on new upload records.
+Also sends email with list of UniqueId which requires Manual Review.
+'''
+def updateRepeatRecordsStatus(googleSheetId, oldRepeatRecords, newUploadRecords):
+    if (not oldRepeatRecords or (len(oldRepeatRecords) == 0)) or (not newUploadRecords or (len(newUploadRecords) == 0)):
+        return
+
+    debugMsg("\nProcessing 'List of repeats' XLS sheet older records ...")
+    debugMsg("New upload records count: %s" %len(newUploadRecords))
+    debugMsg("Old repeat records count: %s" %len(oldRepeatRecords))
+
+    manualReviewUniqueIdList = []
+
+    for newRecord in newUploadRecords:
+        # New record should contains atleast 14 elements
+        if not newRecord or (len(newRecord) < 14):
+            print("\tWARNING: Bad new record found !")
+            continue # ignore bad new record
+
+        # Find latest matching old record
+        uniqueId = newRecord[1]
+        matchingLatestOldRecord,recordIndex = findLatestRepeatRecordForUniqueId(uniqueId, oldRepeatRecords)
+
+        # Check 'Have you submitted this form before?' matches between new and old records
+        newRecSubmittedBefore = newRecord[2]
+        if (newRecSubmittedBefore == 'Yes') and (matchingLatestOldRecord == None):
+            manualReviewUniqueIdList.append(uniqueId)
+            continue
+        if (newRecSubmittedBefore == 'No') and (matchingLatestOldRecord != None):
+            manualReviewUniqueIdList.append(uniqueId)
+            continue
+        if (newRecSubmittedBefore == 'No') and (matchingLatestOldRecord == None):
+            continue # ignore, nothing to be done
+
+        # If no matching old record found then ignore
+        if not newRecSubmittedBefore:
+            continue # ignore, nothing to be done
+
+        # If matching old record is completed then ignore it
+        if (len(matchingLatestOldRecord) >= 17) and (matchingLatestOldRecord[16] == 'Completed'):
+            continue # ignore, nothing to be done
+
+        # Check contact info matches between new and old records
+        if not isMatchingContactInfo(newRecord, matchingLatestOldRecord):
+            manualReviewUniqueIdList.append(uniqueId)
+            continue
+
+        # Check submittion date matches between new and old records
+        if not isSubmissionDataMatches(newRecord, matchingLatestOldRecord):
+            manualReviewUniqueIdList.append(uniqueId)
+            continue
+
+        # Mark old record as Completed.
+        updateRepeatRecordStatus(googleSheetId, recordIndex, 'Completed')
+
+    if (len(manualReviewUniqueIdList) > 0):
+        sendEmailForRecordsMarkedManualReview(manualReviewUniqueIdList)
 
 ################################################################################
 
@@ -167,7 +411,13 @@ def main(argv):
                 pprint.pprint(uidlist)
             upload_values = tabularise.get_repeat_values(labeled_results, uidlist)
             if upload_values:
+                repeatXLSSheetId = GOOGLE_SHEET_IDS['REPEAT_RESPONDENT']
+                oldRepeatRecords = fetchAllListOfRepeatsRecords(repeatXLSSheetId)
+
                 googlesheets.append_rows(GOOGLE_SHEET_IDS['CONTACTS'], 'List of repeats', upload_values)
+
+                # Update 'List of repeats' records status based on newly fetched records.
+                updateRepeatRecordsStatus(repeatXLSSheetId, oldRepeatRecords, upload_values)
 
             rowCount = sqlitedb.exec_sql(conn, f"UPDATE lastrun SET lastsubmit = '{ labeled_results[-1]['meta']['_submission_time'] }'")
             sqlitedb.disconnect_db(conn)
