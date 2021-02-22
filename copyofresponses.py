@@ -6,7 +6,7 @@ import locale
 from datetime import datetime, timedelta
 import json
 
-from common import GROUP_CODES, QUESTION_CODES, debugMsg
+from common import GROUP_CODES, QUESTION_CODES, debugMsg, getUniqueId
 import sendmail
 import pdfcopy
 import googledrive
