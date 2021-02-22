@@ -156,9 +156,9 @@ def isSubmissionDataMatches(newRecord, oldRecord):
     if not oldRecNextSubmissionDate:
         return False
 
-    # Date difference should be in the range (7 -> 30) days
+    # Date difference should be in the range (0 -> 30) days
     numDaysDiff = numDaysDifference(newRecDateSubmittedDate, oldRecNextSubmissionDate)
-    if (numDaysDiff != None) and (numDaysDiff >= 7) and (numDaysDiff <= 30):
+    if (numDaysDiff != None) and (numDaysDiff >= 0) and (numDaysDiff <= 30):
         return True
 
     return False
@@ -252,10 +252,10 @@ def updateRepeatRecordsStatus(googleSheetId, oldRepeatRecords, newUploadRecords)
         # Check 'Have you submitted this form before?' matches between new and old records
         newRecSubmittedBefore = newRecord[2]
         if (newRecSubmittedBefore == 'Yes') and (matchingLatestOldRecord == None):
-            manualReviewUniqueIdList.append(uniqueId)
+            manualReviewUniqueIdList.append(uniqueId + " (no matching old record)")
             continue
         if (newRecSubmittedBefore == 'No') and (matchingLatestOldRecord != None):
-            manualReviewUniqueIdList.append(uniqueId)
+            manualReviewUniqueIdList.append(uniqueId + " (found previous record, but claims not to have submitted before)")
             continue
         if (newRecSubmittedBefore == 'No') and (matchingLatestOldRecord == None):
             continue # ignore, nothing to be done
@@ -270,12 +270,12 @@ def updateRepeatRecordsStatus(googleSheetId, oldRepeatRecords, newUploadRecords)
 
         # Check contact info matches between new and old records
         if not isMatchingContactInfo(newRecord, matchingLatestOldRecord):
-            manualReviewUniqueIdList.append(uniqueId)
+            manualReviewUniqueIdList.append(uniqueId + " (contact info mismatch)")
             continue
 
         # Check submittion date matches between new and old records
         if not isSubmissionDataMatches(newRecord, matchingLatestOldRecord):
-            manualReviewUniqueIdList.append(uniqueId)
+            manualReviewUniqueIdList.append(uniqueId + " (submission date mismatch)")
             continue
 
         # Mark old record as Completed.
