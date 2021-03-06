@@ -2,7 +2,6 @@
 
 from datetime import datetime, timedelta
 import time
-import json
 import pprint
 
 import sqlitedb
@@ -185,7 +184,7 @@ def updateRepeatRecordStatus(googleSheetId, recordIndex, status):
 Sends email with list of UniqueId which are identified for Manual Review.
 '''
 def sendEmailForRecordsMarkedManualReview(manualReviewUniqueIdList):
-    if not manualReviewUniqueIdList or len(manualReviewUniqueIdList) == 0:
+    if not manualReviewUniqueIdList or (len(manualReviewUniqueIdList) == 0):
         return False
 
     result = True
@@ -203,8 +202,7 @@ def sendEmailForRecordsMarkedManualReview(manualReviewUniqueIdList):
     txt = ''
 
     try:
-        with open(SMTP_CREDENTIALS_FILE_NAME, 'r') as smtp_credentials_file:
-            smtp_credentials = json.load(smtp_credentials_file)
+        smtp_credentials = loadJson(SMTP_CREDENTIALS_FILE_NAME)
 
         server = 'smtp.emaillabs.net.pl'
         port = 465
@@ -221,7 +219,7 @@ def sendEmailForRecordsMarkedManualReview(manualReviewUniqueIdList):
 
     except Exception as e:
         print("\tError: Exception caught while sending email, error: %s" % str(e))
-        return False
+        result = False
 
     return result
 
@@ -311,8 +309,7 @@ def main(argv):
         {
             "token": <token>
         }'''
-        with open(KOBO_CREDENTIAL_FILE_NAME, 'r') as kobo_credentials_file:
-            KOBO_TOKEN = json.load(kobo_credentials_file)['token']
+        KOBO_TOKEN = loadJson(KOBO_CREDENTIAL_FILE_NAME)
 
         kobo_import.init_kobo(KOBO_TOKEN)
 
@@ -359,8 +356,7 @@ def main(argv):
             "CONTACTS": <sheet_id>,
             "S70": <sheet_id>
         }'''
-        with open(GOOGLE_SHEET_IDS_FILE_NAME, 'r') as google_sheet_ids_file:
-            GOOGLE_SHEET_IDS = json.load(google_sheet_ids_file)
+        GOOGLE_SHEET_IDS = loadJson(GOOGLE_SHEET_IDS_FILE_NAME)
 
         if add_headers:
             # Sheet is still empty -> fill the header rows first
