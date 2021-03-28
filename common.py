@@ -1,5 +1,6 @@
 # Python file containing group and question codes used throughout the scripts.
 
+import json
 import os
 import requests
 import sys
@@ -183,6 +184,16 @@ def checkEnvironment(requiredFileNameList=[], isInternetCheckRequired=False):
     # Check internet connection.
     if isInternetCheckRequired and not isConnectedToInternet():
         printMsgAndQuit("Error: No internet connection.")
+
+'''
+Loads Json content from input file and returns a json object.
+'''
+def loadJson(fileName):
+    with open(fileName, 'r') as f:
+        return json.load(f)
+
+    print("\tWarning: Failed to load Json from file: %s" % fileName)
+    return None
 
 '''
 Prints debug verbose message.
