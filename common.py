@@ -114,6 +114,9 @@ VERSIONS = {
     'vwfEcRUUwEfqd3Gjwrn9zv': 'v37',
     'vRr6gaC5NTmeSSYaMpL28B': 'v38',
     'vDNJjhcPSh4USSDtzL7hFB': 'v13-twc2',
+    'vC8Gpx3iFvqEuv3sy88iEE': 'v13-i',
+    'vnLMjcyhr6ywCz8fT4daEk': 'v13-twc2',
+    'voAS4WQZmKeNEM89yR5k4p': 'v39'
 }
 
 COLUMNS = {
