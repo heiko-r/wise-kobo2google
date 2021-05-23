@@ -190,10 +190,10 @@ def sendEmailForRecordsMarkedManualReview(manualReviewUniqueIdList):
     result = True
 
     sender_email = 'covidsgsurvey@washinseasia.org'
-    receiver_email = 'heiko@rothkranz.net'
+    receiver_emails = ['heiko@rothkranz.net', 'asa.immanuela@gmail.com']
     subject = "WISE COVID-19 SG Survey Manual Review Required"
 
-    debugMsg("\tSending Manual Review Required email to: %s" % receiver_email)
+    debugMsg("\tSending Manual Review Required emails to: %s" % ", ".join(receiver_emails))
 
     html = "<html><body><b>Manual review required for UniqueId:</b><ol>"
     for uniqueId in manualReviewUniqueIdList:
@@ -207,7 +207,8 @@ def sendEmailForRecordsMarkedManualReview(manualReviewUniqueIdList):
         server = 'smtp.emaillabs.net.pl'
         port = 465
         smtp_conn = sendmail.connect_smtp(server, port, sendmail.ENCRYPTION_TLS, smtp_credentials['user'], smtp_credentials['password'])
-        recipients = sendmail.send_email(smtp_conn, sender_email, receiver_email, subject, txt, html)
+        for receiver_email in receiver_emails:
+            recipients = sendmail.send_email(smtp_conn, sender_email, receiver_email, subject, txt, html)
 
         if recipients is not None:
             debugMsg("\tSuccessfully send email to: %s" % receiver_email)
@@ -309,7 +310,7 @@ def main(argv):
         {
             "token": <token>
         }'''
-        KOBO_TOKEN = loadJson(KOBO_CREDENTIAL_FILE_NAME)
+        KOBO_TOKEN = loadJson(KOBO_CREDENTIAL_FILE_NAME)['token']
 
         kobo_import.init_kobo(KOBO_TOKEN)
 
