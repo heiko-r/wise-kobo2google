@@ -123,11 +123,23 @@ VERSIONS = {
     'vF5Qch4Xrgo5UHD95zhecP': 'v15-i',
     'vSYCDKK5XfQfNkJpnEZagt': 'v15-twc2',
     'vTo9rm52EgFwUrsMejimq8': 'v41',
+    'v9f47aBce93YPYLGca2eCE': 'v42',
+    'veseUxrmwvz9uGHbshxQvx': 'v17-twc2',
+    'vpkZounfe7k9msH6q9y8gd': 'v16-i',
+    'vA3XeYts97qwvf6PRtEYUD': 'v43',
+    'vR4vFAod3dtRHvMDUJdSaq': 'v44',
+    'vTt8CMMK9htRmjW4oBxZrp': 'v45',
+    'vyxLm8EqUqwfVZWr7uCc9N': 'v17-i',
+    'vgqZk5NcciYVvJft8y6fYq': 'v47', # there's no v46
+    'vmQz4duJvbE3bTZVMiqcCK': 'v18-i',
+    'vjFjLR2dUi25YzpDpg4vyJ': 'v48',
+    'vTAWPH62rhK2aWasdE978J': 'v20-i', # skipping v19-i
+    'vMmYEdstUfpszXpthUTRaZ': 'v50', # skipping v49
 }
 
 COLUMNS = {
-    'unique_id': 'JZ',
-    'latest_response': 'KA',
+    'unique_id': 'FU',
+    'latest_response': 'FV',
 }
 
 FORMULAS = {
